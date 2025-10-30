@@ -293,17 +293,23 @@ function mergeSeriesMaps(mapA, mapB){
   return out;
 }
 
-// ***** CHANGED: literal stacked areas (base to origin, others to previous) *****
+// ***** TRUE CUMULATIVE STACK: convert per-project series to cumulative lines *****
 function seriesMapToDatasets(seriesMap, colorGen){
   const items = Array.from(seriesMap.entries()).map(([label,data])=>({
     label, data, total: data.reduce((a,b)=>a+b,0)
   })).sort((a,b)=>b.total-a.total);
 
+  const running = new Array(items[0]?.data.length || 0).fill(0);
+
   return items.map((it, idx)=>{
     const col = colorGen(idx);
+    // cumulative line = previous cumulative + this project's contribution
+    const cumulative = it.data.map((v, i) => v + running[i]);
+    // update running sum for next project
+    for(let i=0;i<running.length;i++){ running[i] = cumulative[i]; }
     return {
       label: it.label,
-      data: it.data,
+      data: cumulative,
       type: 'line',
       borderColor: col.border,
       backgroundColor: col.fill,
@@ -311,7 +317,7 @@ function seriesMapToDatasets(seriesMap, colorGen){
       pointRadius: 0,
       tension: 0.1,
       stack: 'projects',
-      fill: idx === 0 ? 'origin' : '-1',   // <-- key change
+      fill: idx === 0 ? 'origin' : '-1',   // base to origin, others to previous line
       spanGaps: true,
       order: idx + 1
     };
@@ -463,8 +469,12 @@ let chart = new Chart(ctx,{
         // stack mode: show selected project value at that week
         const ds = chart.data.datasets[datasetIndex];
         if(ds && ds._isCapacity) return;
-        const val = ds.data[weekIndex] || 0;
-        openModal(`Week ${weekLabels[weekIndex]} · ${ds.label}`, [{customer: ds.label, hours: val}]);
+        // contribution = current cumulative - previous cumulative (or 0)
+        const i = weekIndex;
+        const prev = (datasetIndex>0 && chart.data.datasets[datasetIndex-1] && !chart.data.datasets[datasetIndex-1]._isCapacity)
+                    ? (chart.data.datasets[datasetIndex-1].data[i] || 0) : 0;
+        const contrib = (ds.data[i] || 0) - prev;
+        openModal(`Week ${weekLabels[weekIndex]} · ${ds.label}`, [{customer: ds.label, hours: contrib}]);
       }
     }
   }
@@ -486,12 +496,10 @@ function getCombinedLoadArray(){
     const pot  = dataPotential[currentKey].weeklyTotal;
     return conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
   } else {
-    let sum = new Array(weekLabels.length).fill(0);
-    for(const ds of chart.data.datasets){
-      if(ds._isCapacity) continue;
-      for(let i=0;i<sum.length;i++) sum[i]+= (ds.data[i]||0);
-    }
-    return sum;
+    // In stack mode, top of stack (last project dataset) is the total
+    const proj = chart.data.datasets.filter(ds => !ds._isCapacity);
+    if (proj.length === 0) return new Array(weekLabels.length).fill(0);
+    return proj[proj.length - 1].data.map(v => v || 0);
   }
 }
 
@@ -558,7 +566,7 @@ function switchToStack(){
   currentMode='stack';
   setAggregateControlsEnabled(false);
 
-  chart.options.scales.y.stacked = true;   // stacked height
+  chart.options.scales.y.stacked = false;  // not needed for cumulative lines
   chart.options.scales.y2.display = false; // hide % axis in stack mode
 
   // Choose source map(s)
@@ -573,7 +581,7 @@ function switchToStack(){
     map = seriesActualMap[currentKey];
   }
 
-  const ds = seriesMapToDatasets(map, palette); // projects first
+  const ds = seriesMapToDatasets(map, palette); // cumulative project layers
 
   // Tooltip shows band (lower→upper)
   chart.options.plugins.tooltip = chart.options.plugins.tooltip || {};
@@ -584,16 +592,10 @@ function switchToStack(){
       const dsArr = chart.data.datasets;
       const cur = dsArr[dsIndex];
       if (cur._isCapacity) return `${cur.label}: ${ctx.formattedValue} hrs`;
-
-      let lower = 0;
-      for (let k = 0; k < dsIndex; k++) {
-        if (!dsArr[k]._isCapacity && dsArr[k].stack === 'projects') {
-          lower += (dsArr[k].data[i] || 0);
-        }
-      }
-      const value = ctx.parsed.y || 0;
-      const upper = lower + value;
-      return `${cur.label}: ${value.toFixed(0)} hrs (range ${lower.toFixed(0)}–${upper.toFixed(0)})`;
+      const prev = (dsIndex>0 && dsArr[dsIndex-1] && !dsArr[dsIndex-1]._isCapacity) ? (dsArr[dsIndex-1].data[i] || 0) : 0;
+      const val = (cur.data[i] || 0) - prev;
+      const upper = cur.data[i] || 0;
+      return `${cur.label}: ${val.toFixed(0)} hrs (range ${prev.toFixed(0)}–${upper.toFixed(0)})`;
     }
   };
 
@@ -631,7 +633,7 @@ chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; if(curr
 chkAct.addEventListener('change', e=>{ showActual = e.target.checked; if(currentMode==='aggregate'){ chart.data.datasets[3].hidden = !showActual; chart.update(); } });
 
 prodSlider.addEventListener('input', e=>{
-  PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
+  PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); document.getElementById('prodVal').textContent = PRODUCTIVITY_FACTOR.toFixed(2);
   if(currentMode==='aggregate'){ chart.data.datasets[1].data = weeklyCapacityFor(currentKey); chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); }
   else { switchToStack(); }
   updateKPIs();
@@ -645,16 +647,16 @@ hoursInput.addEventListener('change', e=>{
   updateKPIs();
 });
 
-viewModeSel.addEventListener('change', e=>{
+document.getElementById('viewMode').addEventListener('change', e=>{
   const mode = e.target.value;
   if(mode==='aggregate'){ switchToAggregate(); }
   else { switchToStack(); }
 });
-stackSourceSel.addEventListener('change', e=>{
+document.getElementById('stackSource').addEventListener('change', e=>{
   currentStackSource = e.target.value;
   if(currentMode==='stack') switchToStack();
 });
-chkCapInStack.addEventListener('change', e=>{
+document.getElementById('showCapacityInStack').addEventListener('change', e=>{
   if(currentMode==='stack') switchToStack();
 });
 
