@@ -292,8 +292,9 @@ function mergeSeriesMaps(mapA, mapB){
   }
   return out;
 }
+
+// ***** CHANGED: literal stacked areas (base to origin, others to previous) *****
 function seriesMapToDatasets(seriesMap, colorGen){
-  // Largest projects at the base
   const items = Array.from(seriesMap.entries()).map(([label,data])=>({
     label, data, total: data.reduce((a,b)=>a+b,0)
   })).sort((a,b)=>b.total-a.total);
@@ -309,17 +310,15 @@ function seriesMapToDatasets(seriesMap, colorGen){
       borderWidth: 1.5,
       pointRadius: 0,
       tension: 0.1,
-      // these 3 make it a cumulative stack
-      stack: 'projects',      // same stack group
-      fill: '-1',             // fill to the previous dataset in this stack
+      stack: 'projects',
+      fill: idx === 0 ? 'origin' : '-1',   // <-- key change
       spanGaps: true,
-      order: idx + 1          // keep the base drawn first
+      order: idx + 1
     };
   });
 }
 
 function palette(idx){
-  // pleasant rotating HSL; unique per idx
   const h = (idx*37)%360;
   const border = `hsl(${h} 65% 45%)`;
   const fill   = `hsl(${h} 65% 45% / 0.18)`;
@@ -378,10 +377,7 @@ function utilizationArray(key, includePotential){
   });
 }
 
-const todayLabel = (()=>{
-  const m = mondayOf(new Date());
-  return formatDateLocal(m);
-})();
+const todayLabel = (()=>{ const m = mondayOf(new Date()); return formatDateLocal(m); })();
 const annos = {
   annotations:{
     todayLine:{
@@ -413,7 +409,7 @@ let chart = new Chart(ctx,{
         data: weeklyCapacityFor(currentKey),
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-        borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0
+        borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true
       },
       { // 2 Potential
         label: () => `${dataConfirmed[currentKey].name} Potential (hrs)`,
@@ -490,7 +486,6 @@ function getCombinedLoadArray(){
     const pot  = dataPotential[currentKey].weeklyTotal;
     return conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
   } else {
-    // sum across stacked series currently shown
     let sum = new Array(weekLabels.length).fill(0);
     for(const ds of chart.data.datasets){
       if(ds._isCapacity) continue;
@@ -503,13 +498,11 @@ function getCombinedLoadArray(){
 function updateKPIs(){
   const cap = weeklyCapacityFor(currentKey)[0] || 0;
   const combined = getCombinedLoadArray();
-  // Peak utilization
   let peak=0, peakIdx=0;
   for(let i=0;i<combined.length;i++){
     const u = cap? (combined[i]/cap*100):0;
     if(u>peak){ peak=u; peakIdx=i; }
   }
-  // Worst week by over/under hours
   let worstDiff = -Infinity, worstIdx = 0;
   for(let i=0;i<combined.length;i++){
     const diff = combined[i] - cap;
@@ -565,8 +558,8 @@ function switchToStack(){
   currentMode='stack';
   setAggregateControlsEnabled(false);
 
-  chart.options.scales.y.stacked = true;
-  chart.options.scales.y2.display = false;
+  chart.options.scales.y.stacked = true;   // stacked height
+  chart.options.scales.y2.display = false; // hide % axis in stack mode
 
   // Choose source map(s)
   let map;
@@ -580,48 +573,46 @@ function switchToStack(){
     map = seriesActualMap[currentKey];
   }
 
-  const ds = seriesMapToDatasets(map, palette, 'stack1');
+  const ds = seriesMapToDatasets(map, palette); // projects first
 
-  // inside switchToStack(), after building datasets:
+  // Tooltip shows band (lower→upper)
   chart.options.plugins.tooltip = chart.options.plugins.tooltip || {};
   chart.options.plugins.tooltip.callbacks = {
     label: (ctx) => {
       const i = ctx.dataIndex;
       const dsIndex = ctx.datasetIndex;
-      const ds = chart.data.datasets;
-      if (ds[dsIndex]._isCapacity) return `${ctx.dataset.label}: ${ctx.formattedValue} hrs`;
+      const dsArr = chart.data.datasets;
+      const cur = dsArr[dsIndex];
+      if (cur._isCapacity) return `${cur.label}: ${ctx.formattedValue} hrs`;
 
-      // sum all prior stacked project datasets at this week
       let lower = 0;
       for (let k = 0; k < dsIndex; k++) {
-        if (!ds[k]._isCapacity && ds[k].stack === 'projects') {
-          lower += (ds[k].data[i] || 0);
+        if (!dsArr[k]._isCapacity && dsArr[k].stack === 'projects') {
+          lower += (dsArr[k].data[i] || 0);
         }
       }
       const value = ctx.parsed.y || 0;
       const upper = lower + value;
-      return `${ctx.dataset.label}: ${value.toFixed(0)} hrs (range ${lower.toFixed(0)}–${upper.toFixed(0)})`;
+      return `${cur.label}: ${value.toFixed(0)} hrs (range ${lower.toFixed(0)}–${upper.toFixed(0)})`;
     }
   };
 
-
-  // Optional capacity overlay
+  // Capacity overlay LAST (not part of stack)
   if (chkCapInStack.checked){
-  ds.push({
-    label: `${dataConfirmed[currentKey].name} Capacity (hrs)`,
-    data: weeklyCapacityFor(currentKey),
-    borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-    backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-    borderWidth: 2,
-    fill: false,
-    borderDash: [6,6],
-    tension: 0.1,
-    pointRadius: 0,
-    _isCapacity: true,
-    order: 0                // draw on top
-  });
-}
-
+    ds.push({
+      label: `${dataConfirmed[currentKey].name} Capacity (hrs)`,
+      data: weeklyCapacityFor(currentKey),
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
+      borderWidth: 2,
+      fill: false,
+      borderDash: [6,6],
+      tension: 0.1,
+      pointRadius: 0,
+      _isCapacity: true,
+      order: 9999                // draw after projects
+    });
+  }
 
   chart.data.datasets = ds;
   chart.options.plugins.title.text = `Project Stack - ${dataConfirmed[currentKey].name} (${stackSourceSel.options[stackSourceSel.selectedIndex].text})`;
