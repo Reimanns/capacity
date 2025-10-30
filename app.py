@@ -40,7 +40,7 @@ html_code = """
     }
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
     .metric .value { font-weight:700; font-size:18px; }
-    .chart-wrap { width:100%; height:540px; margin-bottom: 16px; position:relative; }
+    .chart-wrap { width:100%; height:620px; margin-bottom: 10px; position:relative; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
     /* Modal */
@@ -68,26 +68,8 @@ html_code = """
   <label for="disciplineSelect"><strong>Discipline:</strong></label>
   <select id="disciplineSelect"></select>
 
-  <label><strong>Time Grain:</strong>
-    <select id="timeGrain">
-      <option value="week" selected>Weekly</option>
-      <option value="month">Monthly</option>
-    </select>
-  </label>
-
   <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
   <label><input type="checkbox" id="showActual" checked> Show Actual</label>
-
-  <label><strong>Stack Source:</strong>
-    <select id="stackSource">
-      <option value="confirmed">Confirmed</option>
-      <option value="potential">Potential</option>
-      <option value="confirmedPotential" selected>Confirmed + Potential</option>
-      <option value="actual">Actual</option>
-    </select>
-  </label>
-
-  <label><input type="checkbox" id="showCapacityInStack" checked> Show Capacity on Stack</label>
 
   <label><strong>Productivity:</strong>
     <input type="range" id="prodFactor" min="0.50" max="1.00" step="0.01" value="0.85">
@@ -105,23 +87,20 @@ html_code = """
     <div class="value" id="peakUtil">—</div>
   </div>
   <div class="metric">
-    <div class="label">Worst Period (Max Over/Under)</div>
+    <div class="label">Worst Week (Max Over/Under)</div>
     <div class="value" id="worstWeek">—</div>
   </div>
   <div class="metric">
-    <div class="label">Capacity / Period</div>
+    <div class="label">Weekly Capacity</div>
     <div class="value" id="weeklyCap">—</div>
   </div>
 </div>
 
 <div class="chart-wrap">
-  <canvas id="aggChart"></canvas>
-</div>
-<div class="chart-wrap">
-  <canvas id="stackChart"></canvas>
+  <canvas id="myChart"></canvas>
 </div>
 
-<p class="footnote">Top: totals vs capacity (with Utilization%). Bottom: literal project stack. Hover is synced; click for drilldown. Switch Weekly/Monthly to change the timeline bins.</p>
+<p class="footnote">Tip: click a line/area (Load, Potential, Actual) at any week to see customer breakdown.</p>
 
 <!-- Drilldown Modal -->
 <div class="modal-backdrop" id="modalBackdrop"></div>
@@ -132,7 +111,7 @@ html_code = """
   </header>
   <div class="content">
     <table>
-      <thead><tr><th>Customer / Project</th><th>Hours</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Hours</th></tr></thead>
       <tbody id="modalBody"></tbody>
     </table>
   </div>
@@ -183,7 +162,7 @@ const departmentCapacities = [
 let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
 
-// -------------------- HELPERS (dates & periods) --------------------
+// -------------------- HELPERS --------------------
 function parseDate(s){
   return s.includes("/") ? (()=>{const [m,d,y]=s.split("/");return new Date(+y,+m-1,+d)})() : new Date(s);
 }
@@ -194,8 +173,6 @@ function formatDateLocal(d){
 function mondayOf(d){
   const t=new Date(d); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); t.setHours(0,0,0,0); return t;
 }
-function firstOfMonth(d){ const t=new Date(d.getFullYear(), d.getMonth(), 1); t.setHours(0,0,0,0); return t; }
-
 function getWeekList(){
   let minD=null,maxD=null;
   function expand(arr){
@@ -208,526 +185,234 @@ function getWeekList(){
   while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7); }
   return weeks.map(formatDateLocal);
 }
-function getMonthList(){
-  let minD=null,maxD=null;
-  function expand(arr){
-    for(const p of arr){ const a=parseDate(p.induction), b=parseDate(p.delivery);
-      if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b;
-    }
-  }
-  expand(projects); expand(potentialProjects); expand(projectsActual);
-  const start = firstOfMonth(minD||new Date());
-  const end   = firstOfMonth(maxD||new Date());
-  const months = [];
-  const cur = new Date(start);
-  while(cur <= end){
-    months.push(new Date(cur));
-    cur.setMonth(cur.getMonth()+1);
-  }
-  return months.map(formatDateLocal); // YYYY-MM-01
-}
-
-// Build inclusive period boundaries for any label set
-function buildPeriods(labels, grain){
-  const periods = [];
-  for(let i=0;i<labels.length;i++){
-    const start = new Date(labels[i]);
-    let end;
-    if(i<labels.length-1){
-      end = new Date(labels[i+1]); // next period start (exclusive)
-    }else{
-      end = new Date(start);
-      if(grain==='week'){ end.setDate(end.getDate()+7); }
-      else { end.setMonth(end.getMonth()+1); }
-    }
-    periods.push({start, end});
-  }
-  return periods;
-}
-
-// -------------------- GRAIN-AWARE STATE --------------------
-let currentGrain = 'week'; // 'week' | 'month'
-let periodLabels = [];     // label strings
-let periods = [];          // [{start,end},...]
-let dataConfirmed = {};
-let dataPotential = {};
-let dataActual    = {};
-let seriesConfirmed = {};
-let seriesPotential = {};
-let seriesActualMap = {};
-let currentKey; // discipline key
-
-function capacityArrayFor(key){
-  const dept = departmentCapacities.find(x=>x.key===key);
-  const weeklyCap = dept.headcount * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
-  return periods.map(p=>{
-    const days = (p.end - p.start) / (1000*60*60*24);
-    return weeklyCap * (days/7); // scale capacity by period length
-  });
-}
-
-// -------------------- CORE BINNING (fixed to use period boundaries) --------------------
-// Equal split of project hours across every period that overlaps [a,b]
-function binDetailed(arr, key){
-  const total=new Array(periods.length).fill(0); const breakdown=periods.map(()=>[]);
+function computeWeeklyLoadsDetailed(arr, key, labels){
+  const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
     const a=parseDate(p.induction), b=parseDate(p.delivery);
-    const label = `${p.customer} (${p.number})`;
-
-    // find all overlapping period indexes
-    const idxs=[];
-    for(let i=0;i<periods.length;i++){
-      const per = periods[i];
-      if(per.end > a && per.start <= b){ idxs.push(i); }
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]);
+      if(L>=a && s===-1) s=i; if(L<=b) e=i;
     }
-    if(!idxs.length) continue;
-
-    const perShare = hrs / idxs.length;
-    for(const i of idxs){
-      total[i]+=perShare;
-      breakdown[i].push({customer: label, hours: perShare});
+    if(s!==-1 && e!==-1 && e>=s){
+      const n=e-s+1, per=hrs/n;
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:p.customer, hours:per}); }
     }
   }
   return {weeklyTotal:total, breakdown};
 }
-
-// Actuals: cap at "today"
-function binActual(arr, key){
-  const total=new Array(periods.length).fill(0); const breakdown=periods.map(()=>[]);
+function computeWeeklyLoadsActual(arr, key, labels){
+  const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
   const today=new Date();
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction);
-    const planned=parseDate(p.delivery);
+    const a=parseDate(p.induction), planned=parseDate(p.delivery);
     const end = (a>today) ? planned : (planned<today? planned : today);
     if(end<a) continue;
-
-    const label = `${p.customer} (${p.number})`;
-    const idxs=[];
-    for(let i=0;i<periods.length;i++){
-      const per = periods[i];
-      if(per.end > a && per.start <= end){ idxs.push(i); }
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]);
+      if(L>=a && s===-1) s=i; if(L<=end) e=i;
     }
-    if(!idxs.length) continue;
-
-    const perShare = hrs / idxs.length;
-    for(const i of idxs){
-      total[i]+=perShare;
-      breakdown[i].push({customer: label, hours: perShare});
+    if(s!==-1 && e!==-1 && e>=s){
+      const n=e-s+1, per=hrs/n;
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:p.customer, hours:per}); }
     }
   }
   return {weeklyTotal:total, breakdown};
 }
 
-// Per-project series maps for stack view (overlapping periods)
-function binSeriesMap(arr, key){
-  const map = new Map();
-  for(const p of arr){
-    const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction), b=parseDate(p.delivery);
-    const label = `${p.customer} (${p.number})`;
+// -------------------- PREP --------------------
+const weekLabels = getWeekList();
 
-    const idxs=[];
-    for(let i=0;i<periods.length;i++){
-      const per=periods[i];
-      if(per.end > a && per.start <= b){ idxs.push(i); }
-    }
-    if(!idxs.length) continue;
+const dataConfirmed = {};
+const dataPotential = {};
+const dataActual    = {};
+departmentCapacities.forEach(d=>{
+  const c=computeWeeklyLoadsDetailed(projects, d.key, weekLabels);
+  const p=computeWeeklyLoadsDetailed(potentialProjects, d.key, weekLabels);
+  const a=computeWeeklyLoadsActual(projectsActual, d.key, weekLabels);
+  dataConfirmed[d.key]={name:d.name, weeklyTotal:c.weeklyTotal, breakdown:c.breakdown};
+  dataPotential[d.key]={name:d.name, weeklyTotal:p.weeklyTotal, breakdown:p.breakdown};
+  dataActual[d.key]   ={name:d.name, weeklyTotal:a.weeklyTotal, breakdown:a.breakdown};
+});
 
-    const perShare = hrs / idxs.length;
-    if(!map.has(label)) map.set(label, new Array(periods.length).fill(0));
-    const arrData = map.get(label);
-    for(const i of idxs){ arrData[i]+=perShare; }
-  }
-  return map;
-}
-function binSeriesMapActual(arr, key){
-  const map = new Map();
-  const today=new Date();
-  for(const p of arr){
-    const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction);
-    const planned=parseDate(p.delivery);
-    const end=(a>today)?planned:(planned<today?planned:today);
-    if(end<a) continue;
-
-    const label = `${p.customer} (${p.number})`;
-    const idxs=[];
-    for(let i=0;i<periods.length;i++){
-      const per=periods[i];
-      if(per.end > a && per.start <= end){ idxs.push(i); }
-    }
-    if(!idxs.length) continue;
-
-    const perShare = hrs / idxs.length;
-    if(!map.has(label)) map.set(label, new Array(periods.length).fill(0));
-    const arrData = map.get(label);
-    for(const i of idxs){ arrData[i]+=perShare; }
-  }
-  return map;
-}
-function mergeSeriesMaps(mapA, mapB){
-  const out = new Map();
-  for(const [k,v] of mapA.entries()) out.set(k, v.slice());
-  for(const [k,v] of mapB.entries()){
-    if(!out.has(k)) out.set(k, v.slice());
-    else { const d=out.get(k); for(let i=0;i<d.length;i++) d[i]+=v[i]; }
-  }
-  return out;
-}
-
-// Palette
-function palette(idx){
-  const h = (idx*37)%360;
-  const border = `hsl(${h} 65% 45%)`;
-  const fill   = `hsl(${h} 65% 45% / 0.18)`;
-  return {border, fill};
-}
-
-// -------------------- BUILD (grain switch recomputes everything) --------------------
-function recomputeAll(){
-  periodLabels = (currentGrain==='week') ? getWeekList() : getMonthList();
-  periods = buildPeriods(periodLabels, currentGrain);
-
-  dataConfirmed = {};
-  dataPotential = {};
-  dataActual    = {};
-  seriesConfirmed = {};
-  seriesPotential = {};
-  seriesActualMap = {};
-
-  departmentCapacities.forEach(d=>{
-    const c=binDetailed(projects, d.key);
-    const p=binDetailed(potentialProjects, d.key);
-    const a=binActual(projectsActual, d.key);
-    dataConfirmed[d.key]={name:d.name, weeklyTotal:c.weeklyTotal, breakdown:c.breakdown};
-    dataPotential[d.key]={name:d.name, weeklyTotal:p.weeklyTotal, breakdown:p.breakdown};
-    dataActual[d.key]   ={name:d.name, weeklyTotal:a.weeklyTotal, breakdown:a.breakdown};
-
-    seriesConfirmed[d.key] = binSeriesMap(projects, d.key);
-    seriesPotential[d.key] = binSeriesMap(potentialProjects, d.key);
-    seriesActualMap[d.key] = binSeriesMapActual(projectsActual, d.key);
-  });
-}
-
-function utilizationArray(key){
-  const conf = dataConfirmed[key].weeklyTotal;
-  const pot  = dataPotential[key].weeklyTotal;
-  const cap  = capacityArrayFor(key);
-  return conf.map((v,i)=>{
-    const load = v + (document.getElementById('showPotential').checked ? pot[i] : 0);
-    return cap[i] ? (100 * load / cap[i]) : 0;
-  });
-}
-
-function buildAnnotations(){
-  let label;
-  if(currentGrain==='week'){
-    label = formatDateLocal(mondayOf(new Date()));
-  } else {
-    label = formatDateLocal(firstOfMonth(new Date()));
-  }
-  if(!periodLabels.includes(label)){
-    return { annotations:{} };
-  }
-  return {
-    annotations:{
-      todayLine:{
-        type:'line', xMin: label, xMax: label,
-        borderColor:'#9ca3af', borderWidth:1, borderDash:[4,4],
-        label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' }
-      }
-    }
-  };
-}
-
-// -------------------- PREP + CHARTS --------------------
 const sel = document.getElementById('disciplineSelect');
 departmentCapacities.forEach(d=>{
   const o=document.createElement('option'); o.value=d.key; o.textContent=d.name; sel.appendChild(o);
 });
-sel.value = "Interiors";
-currentKey = sel.value;
+sel.value="Interiors";
 
-const chkPot = document.getElementById('showPotential');
-const chkAct = document.getElementById('showActual');
-const stackSourceSel = document.getElementById('stackSource');
-const chkCapInStack = document.getElementById('showCapacityInStack');
-const prodSlider = document.getElementById('prodFactor');
-const prodVal = document.getElementById('prodVal');
-const hoursInput = document.getElementById('hoursPerFTE');
-const grainSel = document.getElementById('timeGrain');
+// -------------------- CHART --------------------
+const ctx = document.getElementById('myChart').getContext('2d');
+let currentKey = sel.value;
 
-recomputeAll();
-let annos = buildAnnotations();
-
-function buildAggregateDatasets(key){
-  return [
-    { // Confirmed Load
-      label: `${dataConfirmed[key].name} Load (hrs)`,
-      data: dataConfirmed[key].weeklyTotal,
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
-      borderWidth:2, fill:true, tension:0.1, pointRadius:0
-    },
-    { // Capacity / Period
-      label: `${dataConfirmed[key].name} Capacity (hrs/period)`,
-      data: capacityArrayFor(key),
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-      borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true
-    },
-    { // Potential
-      label: `${dataConfirmed[key].name} Potential (hrs)`,
-      data: dataPotential[key].weeklyTotal,
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
-      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !chkPot.checked
-    },
-    { // Actual
-      label: `${dataConfirmed[key].name} Actual (hrs)`,
-      data: dataActual[key].weeklyTotal,
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
-      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !chkAct.checked
-    },
-    { // Utilization %
-      label: 'Utilization %',
-      data: utilizationArray(key),
-      borderColor:'#374151',
-      backgroundColor:'rgba(55,65,81,0.12)',
-      yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0
-    }
-  ];
+function weeklyCapacityFor(key){
+  const dept = departmentCapacities.find(x=>x.key===key);
+  const capPerWeek = dept.headcount * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
+  return weekLabels.map(()=>capPerWeek);
 }
-
-function buildStackDatasets(key, stackMode, showCapacity){
-  let map;
-  if (stackMode==='potential') map = seriesPotential[key];
-  else if (stackMode==='confirmedPotential') map = mergeSeriesMaps(seriesConfirmed[key], seriesPotential[key]);
-  else if (stackMode==='actual') map = seriesActualMap[key];
-  else map = seriesConfirmed[key];
-
-  const items = Array.from(map.entries()).map(([label,data])=>({
-    label, data, total: data.reduce((a,b)=>a+b,0)
-  })).sort((a,b)=>b.total-a.total);
-
-  const running = new Array(periods.length).fill(0);
-  const ds = items.map((it, idx)=>{
-    const col = palette(idx);
-    const cumulative = it.data.map((v,i)=> v + running[i]);
-    for(let i=0;i<running.length;i++) running[i] = cumulative[i];
-    return {
-      label: it.label,
-      data: cumulative,
-      type: 'line',
-      borderColor: col.border,
-      backgroundColor: col.fill,
-      borderWidth:1.5, pointRadius:0, tension:0.1,
-      stack:'projects', fill: idx===0 ? 'origin' : '-1', spanGaps:true, order: idx+1
-    };
+function utilizationArray(key, includePotential){
+  const conf = dataConfirmed[key].weeklyTotal;
+  const pot  = dataPotential[key].weeklyTotal;
+  const cap  = weeklyCapacityFor(key);
+  return conf.map((v,i)=>{
+    const load = includePotential ? (v + pot[i]) : v;
+    return cap[i] ? (100 * load / cap[i]) : 0;
   });
-
-  if (showCapacity){
-    ds.push({
-      label: `${dataConfirmed[key].name} Capacity (hrs/period)`,
-      data: capacityArrayFor(key),
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-      borderWidth: 2, fill: false, borderDash: [6,6],
-      tension: 0.1, pointRadius: 0, _isCapacity: true, order: 9999
-    });
-  }
-  return ds;
 }
 
-const aggCtx = document.getElementById('aggChart').getContext('2d');
-const stackCtx = document.getElementById('stackChart').getContext('2d');
-
-let chartAgg = new Chart(aggCtx, {
-  type:'line',
-  data:{ labels: periodLabels, datasets: buildAggregateDatasets(currentKey) },
-  options:{
-    responsive:true, maintainAspectRatio:false,
-    interaction:{ mode:'index', intersect:false },
-    scales:{
-      x:{ title:{display:true, text: (currentGrain==='week'?'Week Starting':'Month Starting')} },
-      y:{ title:{display:true, text:'Hours'}, beginAtZero:true, stacked:false },
-      y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 }
-    },
-    plugins:{ annotation: annos, legend:{position:'top'}, title:{ display:true, text: 'Totals vs Capacity - '+dataConfirmed[currentKey].name } },
-    onClick:(evt, elems)=>{
-      if(!elems||!elems.length) return;
-      const {datasetIndex, index:idx} = elems[0];
-      if(datasetIndex===1 || datasetIndex===4) return;
-      let breakdownArr=null, label='';
-      if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[idx]; label='Confirmed'; }
-      else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[idx]; label='Potential'; }
-      else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[idx]; label='Actual'; }
-      if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in ${periodLabels[idx]}.`, []); return; }
-      openModal(`${periodLabels[idx]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
+const todayLabel = (()=>{
+  const m = mondayOf(new Date());
+  return formatDateLocal(m);
+})();
+const annos = {
+  annotations:{
+    todayLine:{
+      type:'line', xMin: todayLabel, xMax: todayLabel,
+      borderColor:'#9ca3af', borderWidth:1, borderDash:[4,4],
+      label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' }
     }
-  }
-});
-
-let chartStack = new Chart(stackCtx, {
-  type:'line',
-  data:{ labels: periodLabels, datasets: buildStackDatasets(currentKey, document.getElementById('stackSource').value, document.getElementById('showCapacityInStack').checked) },
-  options:{
-    responsive:true, maintainAspectRatio:false,
-    interaction:{ mode:'index', intersect:false },
-    scales:{
-      x:{ title:{display:true, text: (currentGrain==='week'?'Week Starting':'Month Starting')} },
-      y:{ title:{display:true, text:'Hours'}, beginAtZero:true, stacked:false },
-      y2:{ display:false }
-    },
-    plugins:{ annotation: annos, legend:{position:'top'}, title:{ display:true, text: 'Project Stack - '+dataConfirmed[currentKey].name+' ('+document.getElementById('stackSource').selectedOptions[0].text+')' } },
-    onClick:(evt, elems)=>{
-      if(!elems||!elems.length) return;
-      const {datasetIndex, index:idx} = elems[0];
-      const dsArr = chartStack.data.datasets;
-      const cur = dsArr[datasetIndex];
-      if (cur && cur._isCapacity) return;
-      const prev = (datasetIndex>0 && dsArr[datasetIndex-1] && !dsArr[datasetIndex-1]._isCapacity) ? (dsArr[datasetIndex-1].data[idx] || 0) : 0;
-      const contrib = (cur.data[idx] || 0) - prev;
-      openModal(`${periodLabels[idx]} · ${cur.label}`, [{customer: cur.label, hours: contrib}]);
-    }
-  }
-});
-
-// Tooltip for stack band range
-chartStack.options.plugins.tooltip = chartStack.options.plugins.tooltip || {};
-chartStack.options.plugins.tooltip.callbacks = {
-  label: (ctx) => {
-    const i = ctx.dataIndex;
-    const dsIndex = ctx.datasetIndex;
-    const dsArr = chartStack.data.datasets;
-    const cur = dsArr[dsIndex];
-    if (cur._isCapacity) return `${cur.label}: ${ctx.formattedValue} hrs`;
-    const prev = (dsIndex>0 && dsArr[dsIndex-1] && !dsArr[dsIndex-1]._isCapacity) ? (dsArr[dsIndex-1].data[i] || 0) : 0;
-    const val = (cur.data[i] || 0) - prev;
-    const upper = cur.data[i] || 0;
-    return `${cur.label}: ${val.toFixed(0)} hrs (range ${prev.toFixed(0)}–${upper.toFixed(0)})`;
   }
 };
 
-// -------------------- KPIs --------------------
-function getCombinedLoadArrayForKPIs(){
+let showPotential = true;
+let showActual = true;
+
+let chart = new Chart(ctx,{
+  type:'line',
+  data:{
+    labels: weekLabels,
+    datasets:[
+      { // 0 Confirmed Load
+        label: () => `${dataConfirmed[currentKey].name} Load (hrs)`,
+        data: dataConfirmed[currentKey].weeklyTotal,
+        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
+        borderWidth:2, fill:true, tension:0.1, pointRadius:0
+      },
+      { // 1 Capacity
+        label: () => `${dataConfirmed[currentKey].name} Capacity (hrs)`,
+        data: weeklyCapacityFor(currentKey),
+        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
+        borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0
+      },
+      { // 2 Potential
+        label: () => `${dataConfirmed[currentKey].name} Potential (hrs)`,
+        data: dataPotential[currentKey].weeklyTotal,
+        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
+        borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showPotential
+      },
+      { // 3 Actual
+        label: () => `${dataConfirmed[currentKey].name} Actual (hrs)`,
+        data: dataActual[currentKey].weeklyTotal,
+        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
+        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
+        borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual
+      },
+      { // 4 Utilization %
+        label: 'Utilization %',
+        data: utilizationArray(currentKey, showPotential),
+        borderColor:'#374151',
+        backgroundColor:'rgba(55,65,81,0.12)',
+        yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0
+      }
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:'index', intersect:false },
+    scales:{
+      x:{ title:{display:true, text:'Week Starting'} },
+      y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
+      y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 }
+    },
+    plugins:{
+      annotation: annos,
+      legend:{ position:'top' },
+      title:{ display:true, text: ()=>'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name }
+    },
+    onClick:(evt, elems)=>{
+      if(!elems||!elems.length) return;
+      const {datasetIndex, index:weekIndex} = elems[0];
+      if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
+      let breakdownArr=null, label='';
+      if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[weekIndex]; label='Confirmed'; }
+      else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[weekIndex]; label='Potential'; }
+      else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[weekIndex]; label='Actual'; }
+      if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in week ${weekLabels[weekIndex]}.`, []); return; }
+      openModal(`Week ${weekLabels[weekIndex]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
+    }
+  }
+});
+
+// -------------------- KPIs + UI --------------------
+const prodSlider = document.getElementById('prodFactor');
+const prodVal = document.getElementById('prodVal');
+const hoursInput = document.getElementById('hoursPerFTE');
+const chkPot = document.getElementById('showPotential');
+const chkAct = document.getElementById('showActual');
+
+function refreshDatasets(){
+  // Update capacity line
+  chart.data.datasets[1].data = weeklyCapacityFor(currentKey);
+  // Potential / Actual visibility
+  chart.data.datasets[2].hidden = !showPotential;
+  chart.data.datasets[3].hidden = !showActual;
+  // Utilization
+  chart.data.datasets[4].data = utilizationArray(currentKey, showPotential);
+  chart.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
+  chart.update();
+  updateKPIs();
+}
+
+function updateKPIs(){
+  const cap = weeklyCapacityFor(currentKey)[0] || 0;
   const conf = dataConfirmed[currentKey].weeklyTotal;
   const pot  = dataPotential[currentKey].weeklyTotal;
-  return conf.map((v,i)=> v + (chkPot.checked ? pot[i] : 0));
-}
-function updateKPIs(){
-  const capArr = capacityArrayFor(currentKey);
-  const combined = getCombinedLoadArrayForKPIs();
+  const combined = conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
+  // Peak utilization
   let peak=0, peakIdx=0;
   for(let i=0;i<combined.length;i++){
-    const u = capArr[i]? (combined[i]/capArr[i]*100):0;
+    const u = cap? (combined[i]/cap*100):0;
     if(u>peak){ peak=u; peakIdx=i; }
   }
+  // Worst week by over/under hours
   let worstDiff = -Infinity, worstIdx = 0;
   for(let i=0;i<combined.length;i++){
-    const diff = combined[i] - capArr[i];
+    const diff = combined[i] - cap;
     if(diff>worstDiff){ worstDiff=diff; worstIdx=i; }
   }
-  document.getElementById('peakUtil').textContent = `${peak.toFixed(0)}% (${periodLabels[peakIdx]})`;
+  document.getElementById('peakUtil').textContent = `${peak.toFixed(0)}% (wk ${weekLabels[peakIdx]})`;
   const status = worstDiff>=0 ? `+${worstDiff.toFixed(0)} hrs over` : `${(-worstDiff).toFixed(0)} hrs under`;
-  document.getElementById('worstWeek').textContent = `${periodLabels[worstIdx]} · ${status}`;
-  const capDisp = capArr[0] || 0;
-  document.getElementById('weeklyCap').textContent = `${capDisp.toFixed(0)} hrs / ${currentGrain}`;
+  document.getElementById('worstWeek').textContent = `${weekLabels[worstIdx]} · ${status}`;
+  document.getElementById('weeklyCap').textContent = `${cap.toFixed(0)} hrs / wk`;
 }
 
-// -------------------- HOVER SYNC --------------------
-function syncHover(src, dst){
-  const active = src.getActiveElements();
-  if(!active.length){ dst.setActiveElements([]); dst.update('none'); return; }
-  const idx = active[0].index;
-  const targets = dst.data.datasets.map((_, di)=>({datasetIndex: di, index: idx}));
-  dst.setActiveElements(targets); dst.update('none');
-}
-chartAgg.options.onHover = (e, els)=> syncHover(chartAgg, chartStack);
-chartStack.options.onHover = (e, els)=> syncHover(chartStack, chartAgg);
-
-// -------------------- LISTENERS --------------------
 sel.addEventListener('change', e=>{
   currentKey = e.target.value;
-  refreshBoth();
+  chart.data.datasets[0].label = `${dataConfirmed[currentKey].name} Load (hrs)`;
+  chart.data.datasets[0].data  = dataConfirmed[currentKey].weeklyTotal;
+  chart.data.datasets[1].label = `${dataConfirmed[currentKey].name} Capacity (hrs)`;
+  chart.data.datasets[2].label = `${dataConfirmed[currentKey].name} Potential (hrs)`;
+  chart.data.datasets[3].label = `${dataConfirmed[currentKey].name} Actual (hrs)`;
+  refreshDatasets();
 });
 
-document.getElementById('timeGrain').addEventListener('change', e=>{
-  currentGrain = e.target.value;
-  recomputeAll();
-  annos = buildAnnotations();
-
-  chartAgg.data.labels = periodLabels;
-  chartStack.data.labels = periodLabels;
-
-  chartAgg.options.scales.x.title.text = (currentGrain==='week'?'Week Starting':'Month Starting');
-  chartStack.options.scales.x.title.text = (currentGrain==='week'?'Week Starting':'Month Starting');
-
-  chartAgg.options.plugins.annotation = annos;
-  chartStack.options.plugins.annotation = annos;
-
-  refreshBoth();
-});
-
-chkPot.addEventListener('change', ()=>{
-  chartAgg.data.datasets = buildAggregateDatasets(currentKey);
-  chartAgg.options.plugins.title.text = 'Totals vs Capacity - ' + dataConfirmed[currentKey].name;
-  chartAgg.update();
-  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
-  chartStack.update();
-  updateKPIs();
-});
-
-chkAct.addEventListener('change', ()=>{
-  chartAgg.data.datasets = buildAggregateDatasets(currentKey);
-  chartAgg.update();
-});
-
-stackSourceSel.addEventListener('change', ()=>{
-  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
-  chartStack.options.plugins.title.text = 'Project Stack - ' + dataConfirmed[currentKey].name + ' (' + stackSourceSel.selectedOptions[0].text + ')';
-  chartStack.update();
-});
-
-chkCapInStack.addEventListener('change', ()=>{
-  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
-  chartStack.update();
-});
+chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
+chkAct.addEventListener('change', e=>{ showActual = e.target.checked; refreshDatasets(); });
 
 prodSlider.addEventListener('input', e=>{
   PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
-  chartAgg.data.datasets = buildAggregateDatasets(currentKey);
-  chartAgg.update();
-  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
-  chartStack.update();
-  updateKPIs();
+  refreshDatasets();
 });
-
 hoursInput.addEventListener('change', e=>{
   const v = parseInt(e.target.value||'40',10);
   HOURS_PER_FTE = isNaN(v) ? 40 : Math.min(60, Math.max(30, v));
   e.target.value = HOURS_PER_FTE;
-  chartAgg.data.datasets = buildAggregateDatasets(currentKey);
-  chartAgg.update();
-  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
-  chartStack.update();
-  updateKPIs();
+  refreshDatasets();
 });
-
-function refreshBoth(){
-  chartAgg.data.datasets = buildAggregateDatasets(currentKey);
-  chartAgg.options.plugins.title.text = 'Totals vs Capacity - ' + dataConfirmed[currentKey].name;
-  chartAgg.update();
-
-  chartStack.data.datasets = buildStackDatasets(currentKey, document.getElementById('stackSource').value, document.getElementById('showCapacityInStack').checked);
-  chartStack.options.plugins.title.text = 'Project Stack - ' + dataConfirmed[currentKey].name + ' (' + document.getElementById('stackSource').selectedOptions[0].text + ')';
-  chartStack.update();
-
-  updateKPIs();
-}
 
 // -------------------- Modal --------------------
 const backdrop = document.getElementById('modalBackdrop');
@@ -746,11 +431,12 @@ function closeModal(){
   backdrop.style.display='none'; modal.style.display='none';
 }
 
-// Initial render
-refreshBoth();
+// initial render
+refreshDatasets();
+
 </script>
 </body>
 </html>
 """
 
-components.html(html_code, height=1350, scrolling=True)
+components.html(html_code, height=900, scrolling=True)
