@@ -68,6 +68,24 @@ html_code = """
   <label for="disciplineSelect"><strong>Discipline:</strong></label>
   <select id="disciplineSelect"></select>
 
+  <label><strong>View:</strong>
+    <select id="viewMode">
+      <option value="aggregate">Totals</option>
+      <option value="stack">Project Stack</option>
+    </select>
+  </label>
+
+  <label><strong>Stack Source:</strong>
+    <select id="stackSource" disabled>
+      <option value="confirmed">Confirmed</option>
+      <option value="potential">Potential</option>
+      <option value="confirmedPotential">Confirmed + Potential</option>
+      <option value="actual">Actual</option>
+    </select>
+  </label>
+
+  <label><input type="checkbox" id="showCapacityInStack" checked disabled> Show Capacity</label>
+
   <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
   <label><input type="checkbox" id="showActual" checked> Show Actual</label>
 
@@ -100,7 +118,7 @@ html_code = """
   <canvas id="myChart"></canvas>
 </div>
 
-<p class="footnote">Tip: click a line/area (Load, Potential, Actual) at any week to see customer breakdown.</p>
+<p class="footnote">Tip: in <em>Project Stack</em> view, each stacked area is a project. Click any point for details.</p>
 
 <!-- Drilldown Modal -->
 <div class="modal-backdrop" id="modalBackdrop"></div>
@@ -111,7 +129,7 @@ html_code = """
   </header>
   <div class="content">
     <table>
-      <thead><tr><th>Customer</th><th>Hours</th></tr></thead>
+      <thead><tr><th>Customer / Project</th><th>Hours</th></tr></thead>
       <tbody id="modalBody"></tbody>
     </table>
   </div>
@@ -185,6 +203,8 @@ function getWeekList(){
   while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7); }
   return weeks.map(formatDateLocal);
 }
+
+// Totals per week (confirmed/potential = full span; actual = up to today)
 function computeWeeklyLoadsDetailed(arr, key, labels){
   const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
   for(const p of arr){
@@ -196,7 +216,7 @@ function computeWeeklyLoadsDetailed(arr, key, labels){
     }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:p.customer, hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:`${p.customer} (${p.number})`, hours:per}); }
     }
   }
   return {weeklyTotal:total, breakdown};
@@ -215,10 +235,90 @@ function computeWeeklyLoadsActual(arr, key, labels){
     }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:p.customer, hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:`${p.customer} (${p.number})`, hours:per}); }
     }
   }
   return {weeklyTotal:total, breakdown};
+}
+
+// Per-project series maps for stack view
+function buildProjectSeriesMap(arr, key, labels){
+  const map = new Map(); // label -> data[]
+  for(const p of arr){
+    const hrs=p[key]||0; if(!hrs) continue;
+    const a=parseDate(p.induction), b=parseDate(p.delivery);
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]);
+      if(L>=a && s===-1) s=i; if(L<=b) e=i;
+    }
+    if(s!==-1 && e!==-1 && e>=s){
+      const n=e-s+1, per=hrs/n;
+      const label = `${p.customer} (${p.number})`;
+      if(!map.has(label)) map.set(label, new Array(labels.length).fill(0));
+      const arrData = map.get(label);
+      for(let w=s; w<=e; w++){ arrData[w]+=per; }
+    }
+  }
+  return map;
+}
+function buildProjectSeriesMapActual(arr, key, labels){
+  const map = new Map();
+  const today=new Date();
+  for(const p of arr){
+    const hrs=p[key]||0; if(!hrs) continue;
+    const a=parseDate(p.induction), planned=parseDate(p.delivery);
+    const end=(a>today)?planned:(planned<today?planned:today);
+    if(end<a) continue;
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]);
+      if(L>=a && s===-1) s=i; if(L<=end) e=i;
+    }
+    if(s!==-1 && e!==-1 && e>=s){
+      const n=e-s+1, per=hrs/n;
+      const label = `${p.customer} (${p.number})`;
+      if(!map.has(label)) map.set(label, new Array(labels.length).fill(0));
+      const arrData = map.get(label);
+      for(let w=s; w<=e; w++){ arrData[w]+=per; }
+    }
+  }
+  return map;
+}
+function mergeSeriesMaps(mapA, mapB){
+  const out = new Map();
+  for(const [k,v] of mapA.entries()) out.set(k, v.slice());
+  for(const [k,v] of mapB.entries()){
+    if(!out.has(k)) out.set(k, v.slice());
+    else { const d=out.get(k); for(let i=0;i<d.length;i++) d[i]+=v[i]; }
+  }
+  return out;
+}
+function seriesMapToDatasets(seriesMap, colorGen, stackName='stack1'){
+  // Sort by total descending so big projects sit at the bottom
+  const items = Array.from(seriesMap.entries()).map(([label,data])=>({
+    label, data, total: data.reduce((a,b)=>a+b,0)
+  })).sort((a,b)=>b.total-a.total);
+  return items.map((it, idx)=>{
+    const col = colorGen(idx);
+    return {
+      label: it.label,
+      data: it.data,
+      type: 'line',
+      borderColor: col.border,
+      backgroundColor: col.fill,
+      borderWidth: 1.5,
+      fill: true,
+      pointRadius: 0,
+      tension: 0.1,
+      stack: stackName
+    };
+  });
+}
+function palette(idx){
+  // pleasant rotating HSL; unique per idx
+  const h = (idx*37)%360;
+  const border = `hsl(${h} 65% 45%)`;
+  const fill   = `hsl(${h} 65% 45% / 0.18)`;
+  return {border, fill};
 }
 
 // -------------------- PREP --------------------
@@ -236,6 +336,16 @@ departmentCapacities.forEach(d=>{
   dataActual[d.key]   ={name:d.name, weeklyTotal:a.weeklyTotal, breakdown:a.breakdown};
 });
 
+// series maps for stack view
+const seriesConfirmed = {};
+const seriesPotential = {};
+const seriesActualMap = {};
+departmentCapacities.forEach(d=>{
+  seriesConfirmed[d.key] = buildProjectSeriesMap(projects, d.key, weekLabels);
+  seriesPotential[d.key] = buildProjectSeriesMap(potentialProjects, d.key, weekLabels);
+  seriesActualMap[d.key] = buildProjectSeriesMapActual(projectsActual, d.key, weekLabels);
+});
+
 const sel = document.getElementById('disciplineSelect');
 departmentCapacities.forEach(d=>{
   const o=document.createElement('option'); o.value=d.key; o.textContent=d.name; sel.appendChild(o);
@@ -245,6 +355,8 @@ sel.value="Interiors";
 // -------------------- CHART --------------------
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
+let currentMode = 'aggregate'; // 'aggregate' | 'stack'
+let currentStackSource = 'confirmed'; // confirmed | potential | confirmedPotential | actual
 
 function weeklyCapacityFor(key){
   const dept = departmentCapacities.find(x=>x.key===key);
@@ -275,6 +387,7 @@ const annos = {
   }
 };
 
+// Initial datasets (aggregate)
 let showPotential = true;
 let showActual = true;
 
@@ -325,7 +438,7 @@ let chart = new Chart(ctx,{
     interaction:{ mode:'index', intersect:false },
     scales:{
       x:{ title:{display:true, text:'Week Starting'} },
-      y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
+      y:{ title:{display:true, text:'Hours'}, beginAtZero:true, stacked:false },
       y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 }
     },
     plugins:{
@@ -336,13 +449,22 @@ let chart = new Chart(ctx,{
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
       const {datasetIndex, index:weekIndex} = elems[0];
-      if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
-      let breakdownArr=null, label='';
-      if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[weekIndex]; label='Confirmed'; }
-      else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[weekIndex]; label='Potential'; }
-      else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[weekIndex]; label='Actual'; }
-      if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in week ${weekLabels[weekIndex]}.`, []); return; }
-      openModal(`Week ${weekLabels[weekIndex]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
+
+      if(currentMode==='aggregate'){
+        if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
+        let breakdownArr=null, label='';
+        if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[weekIndex]; label='Confirmed'; }
+        else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[weekIndex]; label='Potential'; }
+        else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[weekIndex]; label='Actual'; }
+        if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in week ${weekLabels[weekIndex]}.`, []); return; }
+        openModal(`Week ${weekLabels[weekIndex]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
+      } else {
+        // stack mode: show selected project value at that week
+        const ds = chart.data.datasets[datasetIndex];
+        if(ds && ds._isCapacity) return;
+        const val = ds.data[weekIndex] || 0;
+        openModal(`Week ${weekLabels[weekIndex]} · ${ds.label}`, [{customer: ds.label, hours: val}]);
+      }
     }
   }
 });
@@ -353,25 +475,29 @@ const prodVal = document.getElementById('prodVal');
 const hoursInput = document.getElementById('hoursPerFTE');
 const chkPot = document.getElementById('showPotential');
 const chkAct = document.getElementById('showActual');
+const viewModeSel = document.getElementById('viewMode');
+const stackSourceSel = document.getElementById('stackSource');
+const chkCapInStack = document.getElementById('showCapacityInStack');
 
-function refreshDatasets(){
-  // Update capacity line
-  chart.data.datasets[1].data = weeklyCapacityFor(currentKey);
-  // Potential / Actual visibility
-  chart.data.datasets[2].hidden = !showPotential;
-  chart.data.datasets[3].hidden = !showActual;
-  // Utilization
-  chart.data.datasets[4].data = utilizationArray(currentKey, showPotential);
-  chart.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
-  chart.update();
-  updateKPIs();
+function getCombinedLoadArray(){
+  if(currentMode==='aggregate'){
+    const conf = dataConfirmed[currentKey].weeklyTotal;
+    const pot  = dataPotential[currentKey].weeklyTotal;
+    return conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
+  } else {
+    // sum across stacked series currently shown
+    let sum = new Array(weekLabels.length).fill(0);
+    for(const ds of chart.data.datasets){
+      if(ds._isCapacity) continue;
+      for(let i=0;i<sum.length;i++) sum[i]+= (ds.data[i]||0);
+    }
+    return sum;
+  }
 }
 
 function updateKPIs(){
   const cap = weeklyCapacityFor(currentKey)[0] || 0;
-  const conf = dataConfirmed[currentKey].weeklyTotal;
-  const pot  = dataPotential[currentKey].weeklyTotal;
-  const combined = conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
+  const combined = getCombinedLoadArray();
   // Peak utilization
   let peak=0, peakIdx=0;
   for(let i=0;i<combined.length;i++){
@@ -390,29 +516,129 @@ function updateKPIs(){
   document.getElementById('weeklyCap').textContent = `${cap.toFixed(0)} hrs / wk`;
 }
 
-sel.addEventListener('change', e=>{
-  currentKey = e.target.value;
-  chart.data.datasets[0].label = `${dataConfirmed[currentKey].name} Load (hrs)`;
-  chart.data.datasets[0].data  = dataConfirmed[currentKey].weeklyTotal;
-  chart.data.datasets[1].label = `${dataConfirmed[currentKey].name} Capacity (hrs)`;
-  chart.data.datasets[2].label = `${dataConfirmed[currentKey].name} Potential (hrs)`;
-  chart.data.datasets[3].label = `${dataConfirmed[currentKey].name} Actual (hrs)`;
-  refreshDatasets();
-});
+function setAggregateControlsEnabled(on){
+  chkPot.disabled = !on;
+  chkAct.disabled = !on;
+  stackSourceSel.disabled = on;
+  chkCapInStack.disabled = on;
+}
 
-chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
-chkAct.addEventListener('change', e=>{ showActual = e.target.checked; refreshDatasets(); });
+function switchToAggregate(){
+  currentMode='aggregate';
+  setAggregateControlsEnabled(true);
+
+  chart.options.scales.y.stacked = false;
+  chart.options.scales.y2.display = true;
+
+  chart.data.datasets = [
+    { label: () => `${dataConfirmed[currentKey].name} Load (hrs)`, data: dataConfirmed[currentKey].weeklyTotal,
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
+      borderWidth:2, fill:true, tension:0.1, pointRadius:0 },
+    { label: () => `${dataConfirmed[currentKey].name} Capacity (hrs)`, data: weeklyCapacityFor(currentKey),
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
+      borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true },
+    { label: () => `${dataConfirmed[currentKey].name} Potential (hrs)`, data: dataPotential[currentKey].weeklyTotal,
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
+      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showPotential },
+    { label: () => `${dataConfirmed[currentKey].name} Actual (hrs)`, data: dataActual[currentKey].weeklyTotal,
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
+      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual },
+    { label: 'Utilization %', data: utilizationArray(currentKey, showPotential),
+      borderColor:'#374151', backgroundColor:'rgba(55,65,81,0.12)',
+      yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0 }
+  ];
+  chart.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
+  chart.update();
+  updateKPIs();
+}
+
+function switchToStack(){
+  currentMode='stack';
+  setAggregateControlsEnabled(false);
+
+  chart.options.scales.y.stacked = true;
+  chart.options.scales.y2.display = false;
+
+  // Choose source map(s)
+  let map;
+  if(currentStackSource==='confirmed'){
+    map = seriesConfirmed[currentKey];
+  } else if(currentStackSource==='potential'){
+    map = seriesPotential[currentKey];
+  } else if(currentStackSource==='confirmedPotential'){
+    map = mergeSeriesMaps(seriesConfirmed[currentKey], seriesPotential[currentKey]);
+  } else { // actual
+    map = seriesActualMap[currentKey];
+  }
+
+  const ds = seriesMapToDatasets(map, palette, 'stack1');
+
+  // Optional capacity overlay
+  if(chkCapInStack.checked){
+    ds.push({
+      label: `${dataConfirmed[currentKey].name} Capacity (hrs)`,
+      data: weeklyCapacityFor(currentKey),
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
+      borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true
+    });
+  }
+
+  chart.data.datasets = ds;
+  chart.options.plugins.title.text = `Project Stack - ${dataConfirmed[currentKey].name} (${stackSourceSel.options[stackSourceSel.selectedIndex].text})`;
+  chart.update();
+  updateKPIs();
+}
+
+function refreshForDisciplineChange(){
+  if(currentMode==='aggregate') switchToAggregate();
+  else switchToStack();
+}
+
+// Listeners
+sel.addEventListener('change', e=>{ currentKey = e.target.value; refreshForDisciplineChange(); });
+chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; if(currentMode==='aggregate'){ chart.data.datasets[2].hidden = !showPotential; chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); updateKPIs(); } });
+chkAct.addEventListener('change', e=>{ showActual = e.target.checked; if(currentMode==='aggregate'){ chart.data.datasets[3].hidden = !showActual; chart.update(); } });
 
 prodSlider.addEventListener('input', e=>{
   PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
-  refreshDatasets();
+  if(currentMode==='aggregate'){ chart.data.datasets[1].data = weeklyCapacityFor(currentKey); chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); }
+  else { switchToStack(); }
+  updateKPIs();
 });
 hoursInput.addEventListener('change', e=>{
   const v = parseInt(e.target.value||'40',10);
   HOURS_PER_FTE = isNaN(v) ? 40 : Math.min(60, Math.max(30, v));
   e.target.value = HOURS_PER_FTE;
-  refreshDatasets();
+  if(currentMode==='aggregate'){ chart.data.datasets[1].data = weeklyCapacityFor(currentKey); chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); }
+  else { switchToStack(); }
+  updateKPIs();
 });
+
+viewModeSel.addEventListener('change', e=>{
+  const mode = e.target.value;
+  if(mode==='aggregate'){ switchToAggregate(); }
+  else { switchToStack(); }
+});
+stackSourceSel.addEventListener('change', e=>{
+  currentStackSource = e.target.value;
+  if(currentMode==='stack') switchToStack();
+});
+chkCapInStack.addEventListener('change', e=>{
+  if(currentMode==='stack') switchToStack();
+});
+
+// Enable/disable control sets when mode changes
+function setAggregateControlsEnabled(on){
+  document.getElementById('showPotential').disabled = !on;
+  document.getElementById('showActual').disabled = !on;
+  document.getElementById('stackSource').disabled = on;
+  document.getElementById('showCapacityInStack').disabled = on;
+}
 
 // -------------------- Modal --------------------
 const backdrop = document.getElementById('modalBackdrop');
@@ -432,8 +658,7 @@ function closeModal(){
 }
 
 // initial render
-refreshDatasets();
-
+switchToAggregate();
 </script>
 </body>
 </html>
