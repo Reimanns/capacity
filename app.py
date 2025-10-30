@@ -183,7 +183,7 @@ const departmentCapacities = [
 let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
 
-// -------------------- HELPERS --------------------
+// -------------------- HELPERS (dates & periods) --------------------
 function parseDate(s){
   return s.includes("/") ? (()=>{const [m,d,y]=s.split("/");return new Date(+y,+m-1,+d)})() : new Date(s);
 }
@@ -194,9 +194,8 @@ function formatDateLocal(d){
 function mondayOf(d){
   const t=new Date(d); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); t.setHours(0,0,0,0); return t;
 }
-function firstOfMonth(d){
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
+function firstOfMonth(d){ const t=new Date(d.getFullYear(), d.getMonth(), 1); t.setHours(0,0,0,0); return t; }
+
 function getWeekList(){
   let minD=null,maxD=null;
   function expand(arr){
@@ -225,93 +224,146 @@ function getMonthList(){
     months.push(new Date(cur));
     cur.setMonth(cur.getMonth()+1);
   }
-  return months.map(formatDateLocal); // label as YYYY-MM-01
+  return months.map(formatDateLocal); // YYYY-MM-01
 }
 
-// Generic loaders over label bins
-function computeLoadsDetailedOverLabels(arr, key, labels){
-  const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
+// Build inclusive period boundaries for any label set
+function buildPeriods(labels, grain){
+  const periods = [];
+  for(let i=0;i<labels.length;i++){
+    const start = new Date(labels[i]);
+    let end;
+    if(i<labels.length-1){
+      end = new Date(labels[i+1]); // next period start (exclusive)
+    }else{
+      end = new Date(start);
+      if(grain==='week'){ end.setDate(end.getDate()+7); }
+      else { end.setMonth(end.getMonth()+1); }
+    }
+    periods.push({start, end});
+  }
+  return periods;
+}
+
+// -------------------- GRAIN-AWARE STATE --------------------
+let currentGrain = 'week'; // 'week' | 'month'
+let periodLabels = [];     // label strings
+let periods = [];          // [{start,end},...]
+let dataConfirmed = {};
+let dataPotential = {};
+let dataActual    = {};
+let seriesConfirmed = {};
+let seriesPotential = {};
+let seriesActualMap = {};
+let currentKey; // discipline key
+
+function capacityArrayFor(key){
+  const dept = departmentCapacities.find(x=>x.key===key);
+  const weeklyCap = dept.headcount * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
+  return periods.map(p=>{
+    const days = (p.end - p.start) / (1000*60*60*24);
+    return weeklyCap * (days/7); // scale capacity by period length
+  });
+}
+
+// -------------------- CORE BINNING (fixed to use period boundaries) --------------------
+// Equal split of project hours across every period that overlaps [a,b]
+function binDetailed(arr, key){
+  const total=new Array(periods.length).fill(0); const breakdown=periods.map(()=>[]);
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
     const a=parseDate(p.induction), b=parseDate(p.delivery);
-    let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){
-      const L=new Date(labels[i]);
-      if(L>=a && s===-1) s=i;
-      if(L<=b) e=i;
+    const label = `${p.customer} (${p.number})`;
+
+    // find all overlapping period indexes
+    const idxs=[];
+    for(let i=0;i<periods.length;i++){
+      const per = periods[i];
+      if(per.end > a && per.start <= b){ idxs.push(i); }
     }
-    if(s!==-1 && e!==-1 && e>=s){
-      const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:`${p.customer} (${p.number})`, hours:per}); }
-    }
-  }
-  return {weeklyTotal:total, breakdown};
-}
-function computeLoadsActualOverLabels(arr, key, labels){
-  const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
-  const today=new Date();
-  for(const p of arr){
-    const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction), planned=parseDate(p.delivery);
-    const end = (a>today) ? planned : (planned<today? planned : today);
-    if(end<a) continue;
-    let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){
-      const L=new Date(labels[i]);
-      if(L>=a && s===-1) s=i;
-      if(L<=end) e=i;
-    }
-    if(s!==-1 && e!==-1 && e>=s){
-      const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:`${p.customer} (${p.number})`, hours:per}); }
+    if(!idxs.length) continue;
+
+    const perShare = hrs / idxs.length;
+    for(const i of idxs){
+      total[i]+=perShare;
+      breakdown[i].push({customer: label, hours: perShare});
     }
   }
   return {weeklyTotal:total, breakdown};
 }
 
-// Per-project series maps for stack view (over arbitrary labels)
-function buildProjectSeriesMapOverLabels(arr, key, labels){
+// Actuals: cap at "today"
+function binActual(arr, key){
+  const total=new Array(periods.length).fill(0); const breakdown=periods.map(()=>[]);
+  const today=new Date();
+  for(const p of arr){
+    const hrs=p[key]||0; if(!hrs) continue;
+    const a=parseDate(p.induction);
+    const planned=parseDate(p.delivery);
+    const end = (a>today) ? planned : (planned<today? planned : today);
+    if(end<a) continue;
+
+    const label = `${p.customer} (${p.number})`;
+    const idxs=[];
+    for(let i=0;i<periods.length;i++){
+      const per = periods[i];
+      if(per.end > a && per.start <= end){ idxs.push(i); }
+    }
+    if(!idxs.length) continue;
+
+    const perShare = hrs / idxs.length;
+    for(const i of idxs){
+      total[i]+=perShare;
+      breakdown[i].push({customer: label, hours: perShare});
+    }
+  }
+  return {weeklyTotal:total, breakdown};
+}
+
+// Per-project series maps for stack view (overlapping periods)
+function binSeriesMap(arr, key){
   const map = new Map();
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
     const a=parseDate(p.induction), b=parseDate(p.delivery);
-    let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){
-      const L=new Date(labels[i]);
-      if(L>=a && s===-1) s=i;
-      if(L<=b) e=i;
+    const label = `${p.customer} (${p.number})`;
+
+    const idxs=[];
+    for(let i=0;i<periods.length;i++){
+      const per=periods[i];
+      if(per.end > a && per.start <= b){ idxs.push(i); }
     }
-    if(s!==-1 && e!==-1 && e>=s){
-      const n=e-s+1, per=hrs/n;
-      const label = `${p.customer} (${p.number})`;
-      if(!map.has(label)) map.set(label, new Array(labels.length).fill(0));
-      const arrData = map.get(label);
-      for(let w=s; w<=e; w++){ arrData[w]+=per; }
-    }
+    if(!idxs.length) continue;
+
+    const perShare = hrs / idxs.length;
+    if(!map.has(label)) map.set(label, new Array(periods.length).fill(0));
+    const arrData = map.get(label);
+    for(const i of idxs){ arrData[i]+=perShare; }
   }
   return map;
 }
-function buildProjectSeriesMapActualOverLabels(arr, key, labels){
+function binSeriesMapActual(arr, key){
   const map = new Map();
   const today=new Date();
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction), planned=parseDate(p.delivery);
+    const a=parseDate(p.induction);
+    const planned=parseDate(p.delivery);
     const end=(a>today)?planned:(planned<today?planned:today);
     if(end<a) continue;
-    let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){
-      const L=new Date(labels[i]);
-      if(L>=a && s===-1) s=i;
-      if(L<=end) e=i;
+
+    const label = `${p.customer} (${p.number})`;
+    const idxs=[];
+    for(let i=0;i<periods.length;i++){
+      const per=periods[i];
+      if(per.end > a && per.start <= end){ idxs.push(i); }
     }
-    if(s!==-1 && e!==-1 && e>=s){
-      const n=e-s+1, per=hrs/n;
-      const label = `${p.customer} (${p.number})`;
-      if(!map.has(label)) map.set(label, new Array(labels.length).fill(0));
-      const arrData = map.get(label);
-      for(let w=s; w<=e; w++){ arrData[w]+=per; }
-    }
+    if(!idxs.length) continue;
+
+    const perShare = hrs / idxs.length;
+    if(!map.has(label)) map.set(label, new Array(periods.length).fill(0));
+    const arrData = map.get(label);
+    for(const i of idxs){ arrData[i]+=perShare; }
   }
   return map;
 }
@@ -333,61 +385,51 @@ function palette(idx){
   return {border, fill};
 }
 
-// -------------------- STATE (grain-aware) --------------------
-let currentGrain = 'week'; // 'week' | 'month'
-let periodLabels = [];     // array of label strings
-let dataConfirmed = {};
-let dataPotential = {};
-let dataActual    = {};
-let seriesConfirmed = {};
-let seriesPotential = {};
-let seriesActualMap = {};
-let currentKey; // discipline key
+// -------------------- BUILD (grain switch recomputes everything) --------------------
+function recomputeAll(){
+  periodLabels = (currentGrain==='week') ? getWeekList() : getMonthList();
+  periods = buildPeriods(periodLabels, currentGrain);
 
-// build labels for grain
-function buildLabelsForGrain(){
-  return (currentGrain==='week') ? getWeekList() : getMonthList();
+  dataConfirmed = {};
+  dataPotential = {};
+  dataActual    = {};
+  seriesConfirmed = {};
+  seriesPotential = {};
+  seriesActualMap = {};
+
+  departmentCapacities.forEach(d=>{
+    const c=binDetailed(projects, d.key);
+    const p=binDetailed(potentialProjects, d.key);
+    const a=binActual(projectsActual, d.key);
+    dataConfirmed[d.key]={name:d.name, weeklyTotal:c.weeklyTotal, breakdown:c.breakdown};
+    dataPotential[d.key]={name:d.name, weeklyTotal:p.weeklyTotal, breakdown:p.breakdown};
+    dataActual[d.key]   ={name:d.name, weeklyTotal:a.weeklyTotal, breakdown:a.breakdown};
+
+    seriesConfirmed[d.key] = binSeriesMap(projects, d.key);
+    seriesPotential[d.key] = binSeriesMap(potentialProjects, d.key);
+    seriesActualMap[d.key] = binSeriesMapActual(projectsActual, d.key);
+  });
 }
 
-// capacity per period (week => constant; month => scale by days/7)
-function capacityArrayFor(key, labels){
-  const dept = departmentCapacities.find(x=>x.key===key);
-  const weeklyCap = dept.headcount * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
-  if(currentGrain==='week'){
-    return labels.map(()=>weeklyCap);
-  } else {
-    // monthly: scale by (days_in_month / 7)
-    return labels.map(lbl=>{
-      const d=new Date(lbl);
-      const y=d.getFullYear(), m=d.getMonth();
-      const days = new Date(y, m+1, 0).getDate();
-      return weeklyCap * (days/7);
-    });
-  }
-}
-
-// utilization %
 function utilizationArray(key){
   const conf = dataConfirmed[key].weeklyTotal;
   const pot  = dataPotential[key].weeklyTotal;
-  const cap  = capacityArrayFor(key, periodLabels);
+  const cap  = capacityArrayFor(key);
   return conf.map((v,i)=>{
     const load = v + (document.getElementById('showPotential').checked ? pot[i] : 0);
     return cap[i] ? (100 * load / cap[i]) : 0;
   });
 }
 
-// annotations (show Today only if it exists in labels)
 function buildAnnotations(){
   let label;
   if(currentGrain==='week'){
     label = formatDateLocal(mondayOf(new Date()));
   } else {
-    const f = firstOfMonth(new Date());
-    label = formatDateLocal(f);
+    label = formatDateLocal(firstOfMonth(new Date()));
   }
   if(!periodLabels.includes(label)){
-    return { annotations:{} }; // no-op if label not present
+    return { annotations:{} };
   }
   return {
     annotations:{
@@ -398,30 +440,6 @@ function buildAnnotations(){
       }
     }
   };
-}
-
-// recompute all data for (grain, labels, discipline list)
-function recomputeAll(){
-  periodLabels = buildLabelsForGrain();
-  dataConfirmed = {};
-  dataPotential = {};
-  dataActual    = {};
-  seriesConfirmed = {};
-  seriesPotential = {};
-  seriesActualMap = {};
-
-  departmentCapacities.forEach(d=>{
-    const c=computeLoadsDetailedOverLabels(projects, d.key, periodLabels);
-    const p=computeLoadsDetailedOverLabels(potentialProjects, d.key, periodLabels);
-    const a=computeLoadsActualOverLabels(projectsActual, d.key, periodLabels);
-    dataConfirmed[d.key]={name:d.name, weeklyTotal:c.weeklyTotal, breakdown:c.breakdown};
-    dataPotential[d.key]={name:d.name, weeklyTotal:p.weeklyTotal, breakdown:p.breakdown};
-    dataActual[d.key]   ={name:d.name, weeklyTotal:a.weeklyTotal, breakdown:a.breakdown};
-
-    seriesConfirmed[d.key] = buildProjectSeriesMapOverLabels(projects, d.key, periodLabels);
-    seriesPotential[d.key] = buildProjectSeriesMapOverLabels(potentialProjects, d.key, periodLabels);
-    seriesActualMap[d.key] = buildProjectSeriesMapActualOverLabels(projectsActual, d.key, periodLabels);
-  });
 }
 
 // -------------------- PREP + CHARTS --------------------
@@ -455,7 +473,7 @@ function buildAggregateDatasets(key){
     },
     { // Capacity / Period
       label: `${dataConfirmed[key].name} Capacity (hrs/period)`,
-      data: capacityArrayFor(key, periodLabels),
+      data: capacityArrayFor(key),
       borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
       borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true
@@ -495,7 +513,7 @@ function buildStackDatasets(key, stackMode, showCapacity){
     label, data, total: data.reduce((a,b)=>a+b,0)
   })).sort((a,b)=>b.total-a.total);
 
-  const running = new Array(items[0]?.data.length || 0).fill(0);
+  const running = new Array(periods.length).fill(0);
   const ds = items.map((it, idx)=>{
     const col = palette(idx);
     const cumulative = it.data.map((v,i)=> v + running[i]);
@@ -514,7 +532,7 @@ function buildStackDatasets(key, stackMode, showCapacity){
   if (showCapacity){
     ds.push({
       label: `${dataConfirmed[key].name} Capacity (hrs/period)`,
-      data: capacityArrayFor(key, periodLabels),
+      data: capacityArrayFor(key),
       borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
       backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
       borderWidth: 2, fill: false, borderDash: [6,6],
@@ -555,7 +573,7 @@ let chartAgg = new Chart(aggCtx, {
 
 let chartStack = new Chart(stackCtx, {
   type:'line',
-  data:{ labels: periodLabels, datasets: buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked) },
+  data:{ labels: periodLabels, datasets: buildStackDatasets(currentKey, document.getElementById('stackSource').value, document.getElementById('showCapacityInStack').checked) },
   options:{
     responsive:true, maintainAspectRatio:false,
     interaction:{ mode:'index', intersect:false },
@@ -564,7 +582,7 @@ let chartStack = new Chart(stackCtx, {
       y:{ title:{display:true, text:'Hours'}, beginAtZero:true, stacked:false },
       y2:{ display:false }
     },
-    plugins:{ annotation: annos, legend:{position:'top'}, title:{ display:true, text: 'Project Stack - '+dataConfirmed[currentKey].name+' ('+stackSourceSel.selectedOptions[0].text+')' } },
+    plugins:{ annotation: annos, legend:{position:'top'}, title:{ display:true, text: 'Project Stack - '+dataConfirmed[currentKey].name+' ('+document.getElementById('stackSource').selectedOptions[0].text+')' } },
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
       const {datasetIndex, index:idx} = elems[0];
@@ -601,7 +619,7 @@ function getCombinedLoadArrayForKPIs(){
   return conf.map((v,i)=> v + (chkPot.checked ? pot[i] : 0));
 }
 function updateKPIs(){
-  const capArr = capacityArrayFor(currentKey, periodLabels);
+  const capArr = capacityArrayFor(currentKey);
   const combined = getCombinedLoadArrayForKPIs();
   let peak=0, peakIdx=0;
   for(let i=0;i<combined.length;i++){
@@ -639,7 +657,6 @@ sel.addEventListener('change', e=>{
 
 document.getElementById('timeGrain').addEventListener('change', e=>{
   currentGrain = e.target.value;
-  // Recompute all data, labels, annotations; update charts
   recomputeAll();
   annos = buildAnnotations();
 
@@ -652,7 +669,7 @@ document.getElementById('timeGrain').addEventListener('change', e=>{
   chartAgg.options.plugins.annotation = annos;
   chartStack.options.plugins.annotation = annos;
 
-  refreshBoth(); // rebuild datasets & KPIs
+  refreshBoth();
 });
 
 chkPot.addEventListener('change', ()=>{
@@ -700,14 +717,13 @@ hoursInput.addEventListener('change', e=>{
   updateKPIs();
 });
 
-// Convenience
 function refreshBoth(){
   chartAgg.data.datasets = buildAggregateDatasets(currentKey);
   chartAgg.options.plugins.title.text = 'Totals vs Capacity - ' + dataConfirmed[currentKey].name;
   chartAgg.update();
 
-  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
-  chartStack.options.plugins.title.text = 'Project Stack - ' + dataConfirmed[currentKey].name + ' (' + stackSourceSel.selectedOptions[0].text + ')';
+  chartStack.data.datasets = buildStackDatasets(currentKey, document.getElementById('stackSource').value, document.getElementById('showCapacityInStack').checked);
+  chartStack.options.plugins.title.text = 'Project Stack - ' + dataConfirmed[currentKey].name + ' (' + document.getElementById('stackSource').selectedOptions[0].text + ')';
   chartStack.update();
 
   updateKPIs();
