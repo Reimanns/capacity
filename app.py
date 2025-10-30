@@ -40,7 +40,7 @@ html_code = """
     }
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
     .metric .value { font-weight:700; font-size:18px; }
-    .chart-wrap { width:100%; height:620px; margin-bottom: 10px; position:relative; }
+    .chart-wrap { width:100%; height:540px; margin-bottom: 16px; position:relative; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
     /* Modal */
@@ -68,26 +68,19 @@ html_code = """
   <label for="disciplineSelect"><strong>Discipline:</strong></label>
   <select id="disciplineSelect"></select>
 
-  <label><strong>View:</strong>
-    <select id="viewMode">
-      <option value="aggregate">Totals</option>
-      <option value="stack">Project Stack</option>
-    </select>
-  </label>
+  <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
+  <label><input type="checkbox" id="showActual" checked> Show Actual</label>
 
   <label><strong>Stack Source:</strong>
-    <select id="stackSource" disabled>
+    <select id="stackSource">
       <option value="confirmed">Confirmed</option>
       <option value="potential">Potential</option>
-      <option value="confirmedPotential">Confirmed + Potential</option>
+      <option value="confirmedPotential" selected>Confirmed + Potential</option>
       <option value="actual">Actual</option>
     </select>
   </label>
 
-  <label><input type="checkbox" id="showCapacityInStack" checked disabled> Show Capacity</label>
-
-  <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
-  <label><input type="checkbox" id="showActual" checked> Show Actual</label>
+  <label><input type="checkbox" id="showCapacityInStack" checked> Show Capacity on Stack</label>
 
   <label><strong>Productivity:</strong>
     <input type="range" id="prodFactor" min="0.50" max="1.00" step="0.01" value="0.85">
@@ -115,10 +108,13 @@ html_code = """
 </div>
 
 <div class="chart-wrap">
-  <canvas id="myChart"></canvas>
+  <canvas id="aggChart"></canvas>
+</div>
+<div class="chart-wrap">
+  <canvas id="stackChart"></canvas>
 </div>
 
-<p class="footnote">Tip: in <em>Project Stack</em> view, each stacked area is a project. Click any point for details.</p>
+<p class="footnote">Top: totals vs capacity (with Utilization%). Bottom: literal project stack. Hover is synced; click for drilldown.</p>
 
 <!-- Drilldown Modal -->
 <div class="modal-backdrop" id="modalBackdrop"></div>
@@ -293,37 +289,7 @@ function mergeSeriesMaps(mapA, mapB){
   return out;
 }
 
-// ***** TRUE CUMULATIVE STACK: convert per-project series to cumulative lines *****
-function seriesMapToDatasets(seriesMap, colorGen){
-  const items = Array.from(seriesMap.entries()).map(([label,data])=>({
-    label, data, total: data.reduce((a,b)=>a+b,0)
-  })).sort((a,b)=>b.total-a.total);
-
-  const running = new Array(items[0]?.data.length || 0).fill(0);
-
-  return items.map((it, idx)=>{
-    const col = colorGen(idx);
-    // cumulative line = previous cumulative + this project's contribution
-    const cumulative = it.data.map((v, i) => v + running[i]);
-    // update running sum for next project
-    for(let i=0;i<running.length;i++){ running[i] = cumulative[i]; }
-    return {
-      label: it.label,
-      data: cumulative,
-      type: 'line',
-      borderColor: col.border,
-      backgroundColor: col.fill,
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0.1,
-      stack: 'projects',
-      fill: idx === 0 ? 'origin' : '-1',   // base to origin, others to previous line
-      spanGaps: true,
-      order: idx + 1
-    };
-  });
-}
-
+// Palette
 function palette(idx){
   const h = (idx*37)%360;
   const border = `hsl(${h} 65% 45%)`;
@@ -356,18 +322,25 @@ departmentCapacities.forEach(d=>{
   seriesActualMap[d.key] = buildProjectSeriesMapActual(projectsActual, d.key, weekLabels);
 });
 
+// Discipline selector
 const sel = document.getElementById('disciplineSelect');
 departmentCapacities.forEach(d=>{
   const o=document.createElement('option'); o.value=d.key; o.textContent=d.name; sel.appendChild(o);
 });
 sel.value="Interiors";
 
-// -------------------- CHART --------------------
-const ctx = document.getElementById('myChart').getContext('2d');
-let currentKey = sel.value;
-let currentMode = 'aggregate'; // 'aggregate' | 'stack'
-let currentStackSource = 'confirmed'; // confirmed | potential | confirmedPotential | actual
+// Controls refs
+const chkPot = document.getElementById('showPotential');
+const chkAct = document.getElementById('showActual');
+const stackSourceSel = document.getElementById('stackSource');
+const chkCapInStack = document.getElementById('showCapacityInStack');
+const prodSlider = document.getElementById('prodFactor');
+const prodVal = document.getElementById('prodVal');
+const hoursInput = document.getElementById('hoursPerFTE');
 
+let currentKey = sel.value;
+
+// Capacity + utilization helpers
 function weeklyCapacityFor(key){
   const dept = departmentCapacities.find(x=>x.key===key);
   const capPerWeek = dept.headcount * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
@@ -394,52 +367,98 @@ const annos = {
   }
 };
 
-// Initial datasets (aggregate)
-let showPotential = true;
-let showActual = true;
+// -------------------- DATASET BUILDERS --------------------
+function buildAggregateDatasets(key, showPotential, showActual){
+  return [
+    { // Confirmed Load
+      label: `${dataConfirmed[key].name} Load (hrs)`,
+      data: dataConfirmed[key].weeklyTotal,
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
+      borderWidth:2, fill:true, tension:0.1, pointRadius:0
+    },
+    { // Capacity
+      label: `${dataConfirmed[key].name} Capacity (hrs)`,
+      data: weeklyCapacityFor(key),
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
+      borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true
+    },
+    { // Potential
+      label: `${dataConfirmed[key].name} Potential (hrs)`,
+      data: dataPotential[key].weeklyTotal,
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
+      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showPotential
+    },
+    { // Actual
+      label: `${dataConfirmed[key].name} Actual (hrs)`,
+      data: dataActual[key].weeklyTotal,
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
+      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual
+    },
+    { // Utilization %
+      label: 'Utilization %',
+      data: utilizationArray(key, showPotential),
+      borderColor:'#374151',
+      backgroundColor:'rgba(55,65,81,0.12)',
+      yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0
+    }
+  ];
+}
 
-let chart = new Chart(ctx,{
+// TRUE CUMULATIVE STACK: convert per-project series to cumulative lines (bands fill to previous)
+function buildStackDatasets(key, stackMode, showCapacity){
+  // Pick project source map
+  let map;
+  if (stackMode==='potential') map = seriesPotential[key];
+  else if (stackMode==='confirmedPotential') map = mergeSeriesMaps(seriesConfirmed[key], seriesPotential[key]);
+  else if (stackMode==='actual') map = seriesActualMap[key];
+  else map = seriesConfirmed[key];
+
+  // Sort projects by total and accumulate
+  const items = Array.from(map.entries()).map(([label,data])=>({
+    label, data, total: data.reduce((a,b)=>a+b,0)
+  })).sort((a,b)=>b.total-a.total);
+
+  const running = new Array(items[0]?.data.length || 0).fill(0);
+  const ds = items.map((it, idx)=>{
+    const col = palette(idx);
+    const cumulative = it.data.map((v,i)=> v + running[i]);
+    for(let i=0;i<running.length;i++) running[i] = cumulative[i];
+    return {
+      label: it.label,
+      data: cumulative,
+      type: 'line',
+      borderColor: col.border,
+      backgroundColor: col.fill,
+      borderWidth:1.5, pointRadius:0, tension:0.1,
+      stack:'projects', fill: idx===0 ? 'origin' : '-1', spanGaps:true, order: idx+1
+    };
+  });
+
+  if (showCapacity){
+    ds.push({
+      label: `${dataConfirmed[key].name} Capacity (hrs)`,
+      data: weeklyCapacityFor(key),
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
+      borderWidth: 2, fill: false, borderDash: [6,6],
+      tension: 0.1, pointRadius: 0, _isCapacity: true, order: 9999
+    });
+  }
+
+  return ds;
+}
+
+// -------------------- CHARTS --------------------
+const aggCtx = document.getElementById('aggChart').getContext('2d');
+const stackCtx = document.getElementById('stackChart').getContext('2d');
+
+let chartAgg = new Chart(aggCtx, {
   type:'line',
-  data:{
-    labels: weekLabels,
-    datasets:[
-      { // 0 Confirmed Load
-        label: () => `${dataConfirmed[currentKey].name} Load (hrs)`,
-        data: dataConfirmed[currentKey].weeklyTotal,
-        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
-        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
-        borderWidth:2, fill:true, tension:0.1, pointRadius:0
-      },
-      { // 1 Capacity
-        label: () => `${dataConfirmed[currentKey].name} Capacity (hrs)`,
-        data: weeklyCapacityFor(currentKey),
-        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-        borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true
-      },
-      { // 2 Potential
-        label: () => `${dataConfirmed[currentKey].name} Potential (hrs)`,
-        data: dataPotential[currentKey].weeklyTotal,
-        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
-        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
-        borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showPotential
-      },
-      { // 3 Actual
-        label: () => `${dataConfirmed[currentKey].name} Actual (hrs)`,
-        data: dataActual[currentKey].weeklyTotal,
-        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
-        backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
-        borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual
-      },
-      { // 4 Utilization %
-        label: 'Utilization %',
-        data: utilizationArray(currentKey, showPotential),
-        borderColor:'#374151',
-        backgroundColor:'rgba(55,65,81,0.12)',
-        yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0
-      }
-    ]
-  },
+  data:{ labels: weekLabels, datasets: buildAggregateDatasets(currentKey, chkPot.checked, chkAct.checked) },
   options:{
     responsive:true, maintainAspectRatio:false,
     interaction:{ mode:'index', intersect:false },
@@ -448,64 +467,72 @@ let chart = new Chart(ctx,{
       y:{ title:{display:true, text:'Hours'}, beginAtZero:true, stacked:false },
       y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 }
     },
-    plugins:{
-      annotation: annos,
-      legend:{ position:'top' },
-      title:{ display:true, text: ()=>'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name }
-    },
+    plugins:{ annotation: annos, legend:{position:'top'}, title:{ display:true, text: 'Weekly Load vs. Capacity - '+dataConfirmed[currentKey].name } },
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
       const {datasetIndex, index:weekIndex} = elems[0];
-
-      if(currentMode==='aggregate'){
-        if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
-        let breakdownArr=null, label='';
-        if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[weekIndex]; label='Confirmed'; }
-        else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[weekIndex]; label='Potential'; }
-        else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[weekIndex]; label='Actual'; }
-        if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in week ${weekLabels[weekIndex]}.`, []); return; }
-        openModal(`Week ${weekLabels[weekIndex]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
-      } else {
-        // stack mode: show selected project value at that week
-        const ds = chart.data.datasets[datasetIndex];
-        if(ds && ds._isCapacity) return;
-        // contribution = current cumulative - previous cumulative (or 0)
-        const i = weekIndex;
-        const prev = (datasetIndex>0 && chart.data.datasets[datasetIndex-1] && !chart.data.datasets[datasetIndex-1]._isCapacity)
-                    ? (chart.data.datasets[datasetIndex-1].data[i] || 0) : 0;
-        const contrib = (ds.data[i] || 0) - prev;
-        openModal(`Week ${weekLabels[weekIndex]} · ${ds.label}`, [{customer: ds.label, hours: contrib}]);
-      }
+      if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
+      let breakdownArr=null, label='';
+      if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[weekIndex]; label='Confirmed'; }
+      else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[weekIndex]; label='Potential'; }
+      else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[weekIndex]; label='Actual'; }
+      if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in week ${weekLabels[weekIndex]}.`, []); return; }
+      openModal(`Week ${weekLabels[weekIndex]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
     }
   }
 });
 
-// -------------------- KPIs + UI --------------------
-const prodSlider = document.getElementById('prodFactor');
-const prodVal = document.getElementById('prodVal');
-const hoursInput = document.getElementById('hoursPerFTE');
-const chkPot = document.getElementById('showPotential');
-const chkAct = document.getElementById('showActual');
-const viewModeSel = document.getElementById('viewMode');
-const stackSourceSel = document.getElementById('stackSource');
-const chkCapInStack = document.getElementById('showCapacityInStack');
-
-function getCombinedLoadArray(){
-  if(currentMode==='aggregate'){
-    const conf = dataConfirmed[currentKey].weeklyTotal;
-    const pot  = dataPotential[currentKey].weeklyTotal;
-    return conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
-  } else {
-    // In stack mode, top of stack (last project dataset) is the total
-    const proj = chart.data.datasets.filter(ds => !ds._isCapacity);
-    if (proj.length === 0) return new Array(weekLabels.length).fill(0);
-    return proj[proj.length - 1].data.map(v => v || 0);
+let chartStack = new Chart(stackCtx, {
+  type:'line',
+  data:{ labels: weekLabels, datasets: buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked) },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:'index', intersect:false },
+    scales:{
+      x:{ title:{display:true, text:'Week Starting'} },
+      y:{ title:{display:true, text:'Hours'}, beginAtZero:true, stacked:false }, // cumulative lines (bands fill to prev)
+      y2:{ display:false }
+    },
+    plugins:{ annotation: annos, legend:{position:'top'}, title:{ display:true, text: 'Project Stack - '+dataConfirmed[currentKey].name+' ('+stackSourceSel.selectedOptions[0].text+')' } },
+    onClick:(evt, elems)=>{
+      if(!elems||!elems.length) return;
+      const {datasetIndex, index:weekIndex} = elems[0];
+      const dsArr = chartStack.data.datasets;
+      const cur = dsArr[datasetIndex];
+      if (cur && cur._isCapacity) return;
+      const prev = (datasetIndex>0 && dsArr[datasetIndex-1] && !dsArr[datasetIndex-1]._isCapacity) ? (dsArr[datasetIndex-1].data[weekIndex] || 0) : 0;
+      const contrib = (cur.data[weekIndex] || 0) - prev;
+      openModal(`Week ${weekLabels[weekIndex]} · ${cur.label}`, [{customer: cur.label, hours: contrib}]);
+    },
+    pluginsTooltipPatched:true
   }
-}
+});
 
+// Better tooltip for stack bands (show band range)
+chartStack.options.plugins.tooltip = chartStack.options.plugins.tooltip || {};
+chartStack.options.plugins.tooltip.callbacks = {
+  label: (ctx) => {
+    const i = ctx.dataIndex;
+    const dsIndex = ctx.datasetIndex;
+    const dsArr = chartStack.data.datasets;
+    const cur = dsArr[dsIndex];
+    if (cur._isCapacity) return `${cur.label}: ${ctx.formattedValue} hrs`;
+    const prev = (dsIndex>0 && dsArr[dsIndex-1] && !dsArr[dsIndex-1]._isCapacity) ? (dsArr[dsIndex-1].data[i] || 0) : 0;
+    const val = (cur.data[i] || 0) - prev;
+    const upper = cur.data[i] || 0;
+    return `${cur.label}: ${val.toFixed(0)} hrs (range ${prev.toFixed(0)}–${upper.toFixed(0)})`;
+  }
+};
+
+// -------------------- KPIs --------------------
+function getCombinedLoadArrayForKPIs(){
+  const conf = dataConfirmed[currentKey].weeklyTotal;
+  const pot  = dataPotential[currentKey].weeklyTotal;
+  return conf.map((v,i)=> v + (chkPot.checked ? pot[i] : 0));
+}
 function updateKPIs(){
   const cap = weeklyCapacityFor(currentKey)[0] || 0;
-  const combined = getCombinedLoadArray();
+  const combined = getCombinedLoadArrayForKPIs();
   let peak=0, peakIdx=0;
   for(let i=0;i<combined.length;i++){
     const u = cap? (combined[i]/cap*100):0;
@@ -522,150 +549,83 @@ function updateKPIs(){
   document.getElementById('weeklyCap').textContent = `${cap.toFixed(0)} hrs / wk`;
 }
 
-function setAggregateControlsEnabled(on){
-  chkPot.disabled = !on;
-  chkAct.disabled = !on;
-  stackSourceSel.disabled = on;
-  chkCapInStack.disabled = on;
+// -------------------- HOVER SYNC --------------------
+function syncHover(src, dst){
+  const active = src.getActiveElements();
+  if(!active.length){ dst.setActiveElements([]); dst.update('none'); return; }
+  const idx = active[0].index;
+  const targets = dst.data.datasets.map((_, di)=>({datasetIndex: di, index: idx}));
+  dst.setActiveElements(targets); dst.update('none');
 }
+chartAgg.options.onHover = (e, els)=> syncHover(chartAgg, chartStack);
+chartStack.options.onHover = (e, els)=> syncHover(chartStack, chartAgg);
 
-function switchToAggregate(){
-  currentMode='aggregate';
-  setAggregateControlsEnabled(true);
+// -------------------- LISTENERS --------------------
+sel.addEventListener('change', e=>{
+  currentKey = e.target.value;
+  refreshBoth();
+});
 
-  chart.options.scales.y.stacked = false;
-  chart.options.scales.y2.display = true;
-
-  chart.data.datasets = [
-    { label: () => `${dataConfirmed[currentKey].name} Load (hrs)`, data: dataConfirmed[currentKey].weeklyTotal,
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
-      borderWidth:2, fill:true, tension:0.1, pointRadius:0 },
-    { label: () => `${dataConfirmed[currentKey].name} Capacity (hrs)`, data: weeklyCapacityFor(currentKey),
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-      borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0, _isCapacity:true },
-    { label: () => `${dataConfirmed[currentKey].name} Potential (hrs)`, data: dataPotential[currentKey].weeklyTotal,
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
-      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showPotential },
-    { label: () => `${dataConfirmed[currentKey].name} Actual (hrs)`, data: dataActual[currentKey].weeklyTotal,
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
-      borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual },
-    { label: 'Utilization %', data: utilizationArray(currentKey, showPotential),
-      borderColor:'#374151', backgroundColor:'rgba(55,65,81,0.12)',
-      yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0 }
-  ];
-  chart.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
-  chart.update();
-  updateKPIs();
-}
-
-function switchToStack(){
-  currentMode='stack';
-  setAggregateControlsEnabled(false);
-
-  chart.options.scales.y.stacked = false;  // not needed for cumulative lines
-  chart.options.scales.y2.display = false; // hide % axis in stack mode
-
-  // Choose source map(s)
-  let map;
-  if(currentStackSource==='confirmed'){
-    map = seriesConfirmed[currentKey];
-  } else if(currentStackSource==='potential'){
-    map = seriesPotential[currentKey];
-  } else if(currentStackSource==='confirmedPotential'){
-    map = mergeSeriesMaps(seriesConfirmed[currentKey], seriesPotential[currentKey]);
-  } else { // actual
-    map = seriesActualMap[currentKey];
-  }
-
-  const ds = seriesMapToDatasets(map, palette); // cumulative project layers
-
-  // Tooltip shows band (lower→upper)
-  chart.options.plugins.tooltip = chart.options.plugins.tooltip || {};
-  chart.options.plugins.tooltip.callbacks = {
-    label: (ctx) => {
-      const i = ctx.dataIndex;
-      const dsIndex = ctx.datasetIndex;
-      const dsArr = chart.data.datasets;
-      const cur = dsArr[dsIndex];
-      if (cur._isCapacity) return `${cur.label}: ${ctx.formattedValue} hrs`;
-      const prev = (dsIndex>0 && dsArr[dsIndex-1] && !dsArr[dsIndex-1]._isCapacity) ? (dsArr[dsIndex-1].data[i] || 0) : 0;
-      const val = (cur.data[i] || 0) - prev;
-      const upper = cur.data[i] || 0;
-      return `${cur.label}: ${val.toFixed(0)} hrs (range ${prev.toFixed(0)}–${upper.toFixed(0)})`;
-    }
-  };
-
-  // Capacity overlay LAST (not part of stack)
-  if (chkCapInStack.checked){
-    ds.push({
-      label: `${dataConfirmed[currentKey].name} Capacity (hrs)`,
-      data: weeklyCapacityFor(currentKey),
-      borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
-      borderWidth: 2,
-      fill: false,
-      borderDash: [6,6],
-      tension: 0.1,
-      pointRadius: 0,
-      _isCapacity: true,
-      order: 9999                // draw after projects
-    });
-  }
-
-  chart.data.datasets = ds;
-  chart.options.plugins.title.text = `Project Stack - ${dataConfirmed[currentKey].name} (${stackSourceSel.options[stackSourceSel.selectedIndex].text})`;
-  chart.update();
-  updateKPIs();
-}
-
-function refreshForDisciplineChange(){
-  if(currentMode==='aggregate') switchToAggregate();
-  else switchToStack();
-}
-
-// Listeners
-sel.addEventListener('change', e=>{ currentKey = e.target.value; refreshForDisciplineChange(); });
-chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; if(currentMode==='aggregate'){ chart.data.datasets[2].hidden = !showPotential; chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); updateKPIs(); } });
-chkAct.addEventListener('change', e=>{ showActual = e.target.checked; if(currentMode==='aggregate'){ chart.data.datasets[3].hidden = !showActual; chart.update(); } });
-
-prodSlider.addEventListener('input', e=>{
-  PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); document.getElementById('prodVal').textContent = PRODUCTIVITY_FACTOR.toFixed(2);
-  if(currentMode==='aggregate'){ chart.data.datasets[1].data = weeklyCapacityFor(currentKey); chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); }
-  else { switchToStack(); }
+chkPot.addEventListener('change', ()=>{
+  // Update agg (potential line + utilization), stack only if using confirmed+potential
+  chartAgg.data.datasets = buildAggregateDatasets(currentKey, chkPot.checked, chkAct.checked);
+  chartAgg.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
+  chartAgg.update();
+  // rebuild stack (in case stack source is confirmed+potential)
+  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
+  chartStack.update();
   updateKPIs();
 });
+
+chkAct.addEventListener('change', ()=>{
+  chartAgg.data.datasets = buildAggregateDatasets(currentKey, chkPot.checked, chkAct.checked);
+  chartAgg.update();
+});
+
+stackSourceSel.addEventListener('change', ()=>{
+  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
+  chartStack.options.plugins.title.text = 'Project Stack - ' + dataConfirmed[currentKey].name + ' (' + stackSourceSel.selectedOptions[0].text + ')';
+  chartStack.update();
+});
+
+chkCapInStack.addEventListener('change', ()=>{
+  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
+  chartStack.update();
+});
+
+prodSlider.addEventListener('input', e=>{
+  PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
+  // capacity + utilization
+  chartAgg.data.datasets = buildAggregateDatasets(currentKey, chkPot.checked, chkAct.checked);
+  chartAgg.update();
+  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
+  chartStack.update();
+  updateKPIs();
+});
+
 hoursInput.addEventListener('change', e=>{
   const v = parseInt(e.target.value||'40',10);
   HOURS_PER_FTE = isNaN(v) ? 40 : Math.min(60, Math.max(30, v));
   e.target.value = HOURS_PER_FTE;
-  if(currentMode==='aggregate'){ chart.data.datasets[1].data = weeklyCapacityFor(currentKey); chart.data.datasets[4].data = utilizationArray(currentKey, showPotential); chart.update(); }
-  else { switchToStack(); }
+  // capacity + utilization
+  chartAgg.data.datasets = buildAggregateDatasets(currentKey, chkPot.checked, chkAct.checked);
+  chartAgg.update();
+  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
+  chartStack.update();
   updateKPIs();
 });
 
-document.getElementById('viewMode').addEventListener('change', e=>{
-  const mode = e.target.value;
-  if(mode==='aggregate'){ switchToAggregate(); }
-  else { switchToStack(); }
-});
-document.getElementById('stackSource').addEventListener('change', e=>{
-  currentStackSource = e.target.value;
-  if(currentMode==='stack') switchToStack();
-});
-document.getElementById('showCapacityInStack').addEventListener('change', e=>{
-  if(currentMode==='stack') switchToStack();
-});
+// Convenience
+function refreshBoth(){
+  chartAgg.data.datasets = buildAggregateDatasets(currentKey, chkPot.checked, chkAct.checked);
+  chartAgg.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
+  chartAgg.update();
 
-// Enable/disable control sets when mode changes
-function setAggregateControlsEnabled(on){
-  document.getElementById('showPotential').disabled = !on;
-  document.getElementById('showActual').disabled = !on;
-  document.getElementById('stackSource').disabled = on;
-  document.getElementById('showCapacityInStack').disabled = on;
+  chartStack.data.datasets = buildStackDatasets(currentKey, stackSourceSel.value, chkCapInStack.checked);
+  chartStack.options.plugins.title.text = 'Project Stack - ' + dataConfirmed[currentKey].name + ' (' + stackSourceSel.selectedOptions[0].text + ')';
+  chartStack.update();
+
+  updateKPIs();
 }
 
 // -------------------- Modal --------------------
@@ -685,11 +645,11 @@ function closeModal(){
   backdrop.style.display='none'; modal.style.display='none';
 }
 
-// initial render
-switchToAggregate();
+// Initial render
+refreshBoth();
 </script>
 </body>
 </html>
 """
 
-components.html(html_code, height=900, scrolling=True)
+components.html(html_code, height=1250, scrolling=True)
