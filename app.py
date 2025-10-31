@@ -60,7 +60,7 @@ def dept_keys():
     return [d["key"] for d in st.session_state.depts]
 
 # --------------------- QUICK EDIT (sidebar) ---------------------
-st.sidebar.header("Quick Edit (meeting mode)")
+st.sidebar.header("Quick Edit")
 dataset_choice = st.sidebar.selectbox("Dataset", ["Confirmed","Potential","Actual"])
 dataset_key = {"Confirmed":"projects","Potential":"potential","Actual":"actual"}[dataset_choice]
 current_list = st.session_state[dataset_key]
@@ -156,6 +156,7 @@ html_template = """
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
     .metric .value { font-weight:700; font-size:18px; }
     .chart-wrap { width:100%; height:620px; margin-bottom: 6px; position:relative; }
+    .chart-wrap.util { height:260px; margin-top: 6px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
     .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9998; }
@@ -182,7 +183,7 @@ html_template = """
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly (workdays)</option>
+      <option value="monthly">Monthly</option>
     </select>
   </label>
 
@@ -194,6 +195,8 @@ html_template = """
   <label><strong>Hours / FTE / wk:</strong>
     <input type="number" id="hoursPerFTE" min="30" max="60" step="1" value="40" style="width:64px;">
   </label>
+
+  <label><input type="checkbox" id="utilSeparate" checked> Utilization in separate chart</label>
 </div>
 
 <div class="metric-bar">
@@ -203,6 +206,8 @@ html_template = """
 </div>
 
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
+<div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
+
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
 <div class="modal-backdrop" id="modalBackdrop"></div>
@@ -390,6 +395,7 @@ const hoursInput = document.getElementById('hoursPerFTE');
 const chkPot = document.getElementById('showPotential');
 const chkAct = document.getElementById('showActual');
 const periodSel = document.getElementById('periodSel');
+const utilSepChk = document.getElementById('utilSeparate');
 
 // -------------------- CAPACITY & UTILIZATION --------------------
 function capacityArray(key, labels, period){
@@ -399,7 +405,7 @@ function capacityArray(key, labels, period){
   return labels.map(lbl=>{
     const d = parseDateLocalISO(lbl);
     const wd = workdaysInMonth(d);
-    return (capPerWeek / 5) * wd;  // scale by workdays
+    return (capPerWeek / 5) * wd;  // scale by workdays in that month
   });
 }
 function utilizationArray(period, key, includePotential){
@@ -418,12 +424,14 @@ const annos = { annotations:{ todayLine:{ type:'line', xMin: weekTodayLabel, xMa
   borderColor:'#9ca3af', borderWidth:1, borderDash:[4,4],
   label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' } } } };
 
-// -------------------- CHART --------------------
+// -------------------- CHARTS --------------------
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
 let currentPeriod = 'weekly';
 let showPotential = true;
 let showActual = false;
+let utilSeparate = true;
+let utilChart = null;
 
 function currentLabels(){ return currentPeriod==='weekly' ? weekLabels : monthLabels; }
 function dataMap(kind){
@@ -482,35 +490,91 @@ let chart = new Chart(ctx,{
       const name = (dataMap('c')[currentKey]?.name)||'Dept';
       const isMonthly = currentPeriod==='monthly';
 
-      // get period-specific breakdown arrays
       const mapC = dataMap('c')[currentKey]?.breakdown || [];
       const mapP = dataMap('p')[currentKey]?.breakdown || [];
       const mapA = dataMap('a')[currentKey]?.breakdown || [];
 
       if(datasetIndex===0){
-        // Clicked CONFIRMED. If "Show Potential" is on, show combined table.
         const bc = mapC[idx] || [];
         const includePot = document.getElementById('showPotential').checked;
         const bp = includePot ? (mapP[idx] || []) : [];
-
         if(includePot && bp.length){
-          const rows = mergeConfirmedPotential(bc, bp); // [{customer, conf, pot, total}]
+          const rows = mergeConfirmedPotential(bc, bp);
           openModalCombined(`${labels[idx]} · ${name} · ${isMonthly?'Monthly':'Weekly'}`, rows);
         } else {
           openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Confirmed (mo, workdays)':'Confirmed (wk)'}`, bc);
         }
       } else if(datasetIndex===2){
-        // Clicked POTENTIAL line => show potential-only
         const bp = mapP[idx] || [];
         openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Potential (mo, workdays)':'Potential (wk)'}`, bp);
       } else if(datasetIndex===3){
-        // Clicked ACTUAL line => show actual-only
         const ba = mapA[idx] || [];
         openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`, ba);
       }
     }
   }
 });
+
+// -------- Utilization mini-chart handling --------
+function createUtilChart(){
+  const ctx2 = document.getElementById('utilChart').getContext('2d');
+  const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
+  utilChart = new Chart(ctx2, {
+    type: 'line',
+    data: {
+      labels: currentLabels(),
+      datasets: [{
+        label: 'Utilization %',
+        data: utilizationArray(currentPeriod, currentKey, showPotential),
+        borderColor: '#111827',
+        backgroundColor: 'rgba(17,24,39,0.10)',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: (currentPeriod==='monthly') ? 0 : 0.1,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { title: { display: true, text: currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting' } },
+        y: { title: { display: true, text: 'Utilization %' }, beginAtZero: true, suggestedMax: 150 }
+      },
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'Utilization %' },
+        annotation: {
+          annotations: {
+            todayLine: {
+              type: 'line', xMin: todayX, xMax: todayX,
+              borderColor: '#9ca3af', borderWidth: 1, borderDash: [4,4],
+              label: { display: true, content: 'Today', position: 'start', color: '#6b7280',
+                       backgroundColor: 'rgba(255,255,255,0.8)' }
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function rebuildUtilChart(){
+  const wrap = document.querySelector('.chart-wrap.util');
+  if (utilSeparate) {
+    wrap.style.display = 'block';
+    if (utilChart) { utilChart.destroy(); utilChart = null; }
+    createUtilChart();
+    // hide % from main chart
+    chart.data.datasets[4].hidden = true;
+  } else {
+    wrap.style.display = 'none';
+    if (utilChart) { utilChart.destroy(); utilChart = null; }
+    // show % on main chart
+    chart.data.datasets[4].hidden = false;
+  }
+  chart.update();
+}
 
 // -------------------- KPIs & REFRESH --------------------
 function updateKPIs(){
@@ -564,6 +628,17 @@ function refreshDatasets(){
 
   chart.update();
   updateKPIs();
+
+  if (utilChart) {
+    utilChart.data.labels = currentLabels();
+    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showPotential);
+    utilChart.options.scales.x.title.text = (currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting');
+    const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
+    utilChart.options.plugins.annotation.annotations.todayLine.xMin = todayX;
+    utilChart.options.plugins.annotation.annotations.todayLine.xMax = todayX;
+    utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
+    utilChart.update();
+  }
 }
 
 // -------------------- LISTENERS --------------------
@@ -583,6 +658,10 @@ hoursInput.addEventListener('change', e=>{
 periodSel.addEventListener('change', e=>{
   currentPeriod = e.target.value; 
   refreshDatasets();
+});
+utilSepChk.addEventListener('change', e=>{
+  utilSeparate = e.target.checked;
+  rebuildUtilChart();
 });
 
 // -------------------- MODAL (single vs combined) --------------------
@@ -627,7 +706,9 @@ function openModalCombined(title, rows){
 }
 function closeModal(){ backdrop.style.display='none'; modal.style.display='none'; }
 
+// initial render
 refreshDatasets();
+rebuildUtilChart();
 </script>
 </body>
 </html>
@@ -642,4 +723,4 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-components.html(html_code, height=900, scrolling=True)
+components.html(html_code, height=1020, scrolling=True)
