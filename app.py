@@ -9,43 +9,42 @@ import pandas as pd
 st.set_page_config(layout="wide", page_title="Labor Capacity Dashboard")
 st.image("citadel_logo.png", width=200)
 
-# --------------------- DEFAULT DATA ---------------------
+# --------------------- DEFAULT DATA (YOUR NEW SET) ---------------------
 DEFAULT_PROJECTS = [
-  {"number":"P7578","customer":"ADFAM","aircraftModel":"A340","scope":"Center Gear Replacement","induction":"2025-02-10","delivery":"2025-02-17","Maintenance":688,"Interiors":0,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7476","customer":"GE","aircraftModel":"747-400","scope":"Multi Check, AD's & SB's","induction":"2025-02-18","delivery":"2025-04-03","Maintenance":4955,"Interiors":100,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7591","customer":"Freedom II","aircraftModel":"757-200","scope":"B Check, AD's & SB's","induction":"2025-02-23","delivery":"2025-03-02","Maintenance":871.5,"Interiors":0,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7560","customer":"BEFO","aircraftModel":"737","scope":"96mnth Check","induction":"2025-03-23","delivery":"2025-06-15","Maintenance":4038,"Interiors":1921,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":8,"Upholstery":14,"Cabinetry":0},
-  {"number":"P7517","customer":"Parallel","aircraftModel":"757-200","scope":"Interior Mod","induction":"2025-04-15","delivery":"2025-08-31","Maintenance":584,"Interiors":5997,"Avionics":7114,"SheetMetal":1885,"FinishPaint":4920,"Engineering":0,"Upholstery":6885,"Cabinetry":2272},
-  {"number":"P7561","customer":"L3-FBI","aircraftModel":"757-200","scope":"Maintenance & Interior Mod","induction":"2025-07-31","delivery":"2025-10-14","Maintenance":6882,"Interiors":1029,"Avionics":276,"SheetMetal":90,"FinishPaint":116,"Engineering":244,"Upholstery":0,"Cabinetry":228},
-  {"number":"P7426","customer":"Celestial","aircraftModel":"757","scope":"Maintenance & Interior Mod","induction":"2025-02-06","delivery":"2025-03-28","Maintenance":0,"Interiors":2840,"Avionics":0,"SheetMetal":0,"FinishPaint":953,"Engineering":0,"Upholstery":1025,"Cabinetry":100},
-  {"number":"P7592","customer":"LJ Aviation","aircraftModel":"","scope":"GOGO WAP","induction":"2025-02-23","delivery":"2025-03-06","Maintenance":0,"Interiors":0,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7392","customer":"L3-FBI","aircraftModel":"757","scope":"Maintenance & Interior Mod","induction":"2025-05-01","delivery":"2025-06-01","Maintenance":0,"Interiors":695,"Avionics":300,"SheetMetal":90,"FinishPaint":16,"Engineering":220,"Upholstery":0,"Cabinetry":240}
+    {"number":"P7657","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-15T00:00:00","delivery":"2025-11-25T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37},
+    {"number":"P7611","customer":"Alpha Star","aircraftModel":None,"scope":None,"induction":"2025-10-20T00:00:00","delivery":"2025-12-04T00:00:00","Maintenance":2432.23,"Structures":1252.97,"Avionics":737.04,"Inspection":1474.08,"Interiors":1474.08,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
+    {"number":"P7645","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-30T00:00:00","delivery":"2025-12-10T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37},
+    {"number":"P7426","customer":"Celestial","aircraftModel":"B757","scope":"Post Maintenance Discrepancies","induction":"2026-01-05T00:00:00","delivery":"2026-01-15T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
+    {"number":"P7548","customer":"Ty Air","aircraftModel":"B737","scope":"CMS Issues","induction":"2025-10-20T00:00:00","delivery":"2025-10-30T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
+    {"number":"P7706","customer":"Valkyrie","aircraftModel":"B737-MAX","scope":"Starlink, Mods","induction":"2025-10-31T00:00:00","delivery":"2025-12-09T00:00:00","Maintenance":102.75,"Structures":328.8,"Avionics":411.0,"Inspection":164.4,"Interiors":945.3,"Engineering":82.2,"Cabinet":0,"Upholstery":0,"Finish":20.55},
+    {"number":"P7685","customer":"Sands","aircraftModel":"B737-700","scope":"Starlink","induction":"2025-11-03T00:00:00","delivery":"2025-11-17T00:00:00","Maintenance":105.44,"Structures":224.06,"Avionics":303.14,"Inspection":118.62,"Interiors":474.48,"Engineering":79.08,"Cabinet":0,"Upholstery":0,"Finish":13.18},
 ]
 DEFAULT_POTENTIAL = [
-  {"number":"P7580","customer":"Polaris","aircraftModel":"B737","scope":"144 Mo. Check","induction":"2025-09-01","delivery":"2025-11-10","Maintenance":4162,"Interiors":3783,"Avionics":1135,"SheetMetal":2270,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7560","customer":"BEFO","aircraftModel":"737","scope":"Additional Interior Work","induction":"2025-03-23","delivery":"2025-05-23","Maintenance":0,"Interiors":103,"Avionics":8,"SheetMetal":0,"FinishPaint":0,"Engineering":8,"Upholstery":14,"Cabinetry":0}
+    {"number":"P7661","customer":"Sands","aircraftModel":"A340-500","scope":"C Check","induction":"2026-01-29T00:00:00","delivery":"2026-02-28T00:00:00","Maintenance":2629.44,"Structures":1709.14,"Avionics":723.1,"Inspection":1248.98,"Interiors":262.94,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":"P7669","customer":"Sands","aircraftModel":"A319-133","scope":"C Check","induction":"2025-12-08T00:00:00","delivery":"2026-01-28T00:00:00","Maintenance":2029.67,"Structures":984.08,"Avionics":535.55,"Inspection":675.56,"Interiors":1906.66,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":None,"customer":"Sands","aircraftModel":"B767-300","scope":"C Check","induction":"2026-09-15T00:00:00","delivery":"2026-12-04T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":"P7686","customer":"Polaris","aircraftModel":"B777","scope":"1A & 3A Mx Checks","induction":"2025-12-01T00:00:00","delivery":"2025-12-09T00:00:00","Maintenance":643.15,"Structures":287.36,"Avionics":150.52,"Inspection":177.89,"Interiors":109.47,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":"P7430","customer":"Turkmen","aircraftModel":"B777","scope":"Maint/Recon/Refub","induction":"2025-11-10T00:00:00","delivery":"2026-07-13T00:00:00","Maintenance":12720.0,"Structures":12720.0,"Avionics":3180.0,"Inspection":3180.0,"Interiors":19080.0,"Engineering":3180,"Cabinet":3180,"Upholstery":3180,"Finish":3180},
+    {"number":"P7649","customer":"NEP","aircraftModel":"B767-300","scope":"Refurb","induction":"2026-02-02T00:00:00","delivery":"2026-07-13T00:00:00","Maintenance":2000.0,"Structures":2400.0,"Avionics":2800.0,"Inspection":800.0,"Interiors":4400.0,"Engineering":1800,"Cabinet":1600,"Upholstery":1200,"Finish":3000},
+    {"number":"P7689","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C3,C6C7 Mx","induction":"2025-09-10T00:00:00","delivery":"2026-11-07T00:00:00","Maintenance":8097.77,"Structures":1124.69,"Avionics":899.75,"Inspection":787.28,"Interiors":337.14,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":"P7690","customer":"Sands","aircraftModel":None,"scope":"C1,C2,C7 Mx","induction":"2025-05-25T00:00:00","delivery":"2025-07-22T00:00:00","Maintenance":3227.14,"Structures":2189.85,"Avionics":922.04,"Inspection":1152.55,"Interiors":4033.92,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":"P7691","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C2,C3,C7 Mx","induction":"2026-10-13T00:00:00","delivery":"2026-12-22T00:00:00","Maintenance":4038.3,"Structures":5115.18,"Avionics":1076.88,"Inspection":1346.1,"Interiors":1884.54,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
 ]
-DEFAULT_ACTUAL = [
-  {"number":"P7578","customer":"ADFAM","aircraftModel":"A340","scope":"Center Gear Replacement","induction":"2025-02-10","delivery":"2025-02-17","Maintenance":458.9,"Interiors":5.59,"Avionics":0,"SheetMetal":107.37,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7476","customer":"GE","aircraftModel":"747-400","scope":"Multi Check, AD's & SB's","induction":"2025-02-18","delivery":"2025-04-03","Maintenance":391.71,"Interiors":355.79,"Avionics":110.46,"SheetMetal":175.23,"FinishPaint":0,"Engineering":0,"Upholstery":574.34,"Cabinetry":0},
-  {"number":"P7591","customer":"Freedom II","aircraftModel":"757-200","scope":"B Check, AD's & SB's","induction":"2025-02-23","delivery":"2025-03-02","Maintenance":220.56,"Interiors":23.42,"Avionics":55.82,"SheetMetal":58.39,"FinishPaint":0,"Engineering":0,"Upholstery":17.22,"Cabinetry":25.02},
-  {"number":"P7560","customer":"BEFO","aircraftModel":"737","scope":"96mnth Check","induction":"2025-03-23","delivery":"2025-06-15","Maintenance":0,"Interiors":0,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7517","customer":"Parallel","aircraftModel":"757-200","scope":"Interior Mod","induction":"2025-04-15","delivery":"2025-08-31","Maintenance":140.97,"Interiors":309.74,"Avionics":438,"SheetMetal":12.32,"FinishPaint":89.67,"Engineering":0,"Upholstery":912.77,"Cabinetry":123.05},
-  {"number":"P7561","customer":"L3-FBI","aircraftModel":"757-200","scope":"Maintenance & Interior Mod","induction":"2025-07-31","delivery":"2025-10-14","Maintenance":0,"Interiors":0,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7426","customer":"Celestial","aircraftModel":"757","scope":"Maintenance & Interior Mod","induction":"2025-02-06","delivery":"2025-03-28","Maintenance":2032.27,"Interiors":3769.69,"Avionics":3.61,"SheetMetal":1043.93,"FinishPaint":384.49,"Engineering":0,"Upholstery":948.44,"Cabinetry":116.5},
-  {"number":"P7592","customer":"LJ Aviation","aircraftModel":"","scope":"GOGO WAP","induction":"2025-02-23","delivery":"2025-03-06","Maintenance":0,"Interiors":0,"Avionics":125.73,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0},
-  {"number":"P7392","customer":"L3-FBI","aircraftModel":"757","scope":"Maintenance & Interior Mod","induction":"2025-05-01","delivery":"2025-06-01","Maintenance":0,"Interiors":27.13,"Avionics":0,"SheetMetal":0,"FinishPaint":0,"Engineering":0,"Upholstery":0,"Cabinetry":0}
-]
+DEFAULT_ACTUAL = []  # no "actual" provided; keep empty
 DEFAULT_DEPTS = [
-  {"name":"Interiors","headcount":14,"key":"Interiors"},
-  {"name":"Finish","headcount":4,"key":"FinishPaint"},
-  {"name":"Cabinetry","headcount":2,"key":"Cabinetry"},
-  {"name":"Upholstery","headcount":6,"key":"Upholstery"},
-  {"name":"Avionics","headcount":7,"key":"Avionics"},
-  {"name":"Sheet Metal","headcount":10,"key":"SheetMetal"},
-  {"name":"Engineering","headcount":3,"key":"Engineering"}
+    {"name":"Maintenance","headcount":36,"key":"Maintenance"},
+    {"name":"Structures","headcount":22,"key":"Structures"},
+    {"name":"Avionics","headcount":15,"key":"Avionics"},
+    {"name":"Inspection","headcount":10,"key":"Inspection"},
+    {"name":"Interiors","headcount":11,"key":"Interiors"},
+    {"name":"Engineering","headcount":7,"key":"Engineering"},
+    {"name":"Cabinet","headcount":3,"key":"Cabinet"},
+    {"name":"Upholstery","headcount":7,"key":"Upholstery"},
+    {"name":"Finish","headcount":6,"key":"Finish"},
 ]
-DEPT_KEYS = ["Maintenance","Interiors","Avionics","SheetMetal","FinishPaint","Engineering","Upholstery","Cabinetry"]
+
+# Which hour columns exist (used by Quick Edit)
+DEPT_KEYS = ["Maintenance","Structures","Avionics","Inspection","Interiors","Engineering","Cabinet","Upholstery","Finish"]
 
 # --------------------- SESSION STATE ---------------------
 if "projects" not in st.session_state:
@@ -63,7 +62,7 @@ dataset_choice = st.sidebar.selectbox("Dataset to modify", ["Confirmed","Potenti
 dataset_key = {"Confirmed":"projects","Potential":"potential","Actual":"actual"}[dataset_choice]
 current_list = st.session_state[dataset_key]
 
-project_ids = [f'{p["number"]} — {p["customer"]}' for p in current_list]
+project_ids = [f'{(p.get("number") or "—")} — {(p.get("customer") or "Unknown")}' for p in current_list]
 select_existing = st.sidebar.selectbox("Project", ["➕ New Project"] + project_ids)
 
 with st.sidebar.form("quick_edit"):
@@ -72,24 +71,23 @@ with st.sidebar.form("quick_edit"):
         customer = st.text_input("Customer", "")
         aircraft = st.text_input("Aircraft Model", "")
         scope = st.text_input("Scope", "")
-        induction = st.date_input("Induction", date(2025, 1, 1)).isoformat()
-        delivery = st.date_input("Delivery", date(2025, 1, 8)).isoformat()
-        hours_inputs = {}
-        for k in DEPT_KEYS:
-            hours_inputs[k] = st.number_input(f"{k} hours", min_value=0.0, value=0.0, step=1.0)
+        induction = st.date_input("Induction", date(2025, 11, 1)).isoformat()
+        delivery  = st.date_input("Delivery",  date(2025, 11, 8)).isoformat()
+        hours_inputs = {k: st.number_input(f"{k} hours", min_value=0.0, value=0.0, step=1.0) for k in DEPT_KEYS}
     else:
         idx = project_ids.index(select_existing)
         proj = deepcopy(current_list[idx])
-        number = st.text_input("Project Number", proj["number"])
-        customer = st.text_input("Customer", proj["customer"])
-        aircraft = st.text_input("Aircraft Model", proj.get("aircraftModel",""))
-        scope = st.text_input("Scope", proj.get("scope",""))
-        # accept both iso and "YYYY-MM-DD" strings
-        induction = st.date_input("Induction", date.fromisoformat(proj["induction"])).isoformat()
-        delivery  = st.date_input("Delivery",  date.fromisoformat(proj["delivery"])).isoformat()
-        hours_inputs = {}
-        for k in DEPT_KEYS:
-            hours_inputs[k] = st.number_input(f"{k} hours", min_value=0.0, value=float(proj.get(k,0) or 0), step=1.0)
+        number = st.text_input("Project Number", str(proj.get("number") or ""))
+        customer = st.text_input("Customer", str(proj.get("customer") or ""))
+        aircraft = st.text_input("Aircraft Model", str(proj.get("aircraftModel") or ""))
+        scope = st.text_input("Scope", str(proj.get("scope") or ""))
+        # support ISO strings with time
+        induction = st.date_input("Induction", date.fromisoformat(str(proj["induction"])[:10])).isoformat()
+        delivery  = st.date_input("Delivery",  date.fromisoformat(str(proj["delivery"])[:10])).isoformat()
+        hours_inputs = {
+            k: st.number_input(f"{k} hours", min_value=0.0, value=float(proj.get(k, 0) or 0), step=1.0)
+            for k in DEPT_KEYS
+        }
 
     colA, colB = st.columns(2)
     with colA:
@@ -127,45 +125,18 @@ with st.expander("Bulk Edit: Confirmed / Potential / Actual", expanded=False):
     c1, c2, c3 = st.columns(3)
     with c1:
         df_proj = st.data_editor(pd.DataFrame(st.session_state.projects), key="ed_confirmed", height=350)
-        st.session_state.projects = df_proj.fillna(0).astype(object).to_dict(orient="records")
+        st.session_state.projects = df_proj.astype(object).to_dict(orient="records")
     with c2:
         df_pot = st.data_editor(pd.DataFrame(st.session_state.potential), key="ed_potential", height=350)
-        st.session_state.potential = df_pot.fillna(0).astype(object).to_dict(orient="records")
+        st.session_state.potential = df_pot.astype(object).to_dict(orient="records")
     with c3:
         df_act = st.data_editor(pd.DataFrame(st.session_state.actual), key="ed_actual", height=350)
-        st.session_state.actual = df_act.fillna(0).astype(object).to_dict(orient="records")
+        st.session_state.actual = df_act.astype(object).to_dict(orient="records")
 
 with st.expander("Edit Department Headcounts", expanded=False):
-    df_depts = st.data_editor(pd.DataFrame(st.session_state.depts), key="ed_depts", height=200)
-    # Ensure headcount numeric
+    df_depts = st.data_editor(pd.DataFrame(st.session_state.depts), key="ed_depts", height=240)
     df_depts["headcount"] = pd.to_numeric(df_depts["headcount"], errors="coerce").fillna(0).astype(int)
     st.session_state.depts = df_depts.to_dict(orient="records")
-
-with st.expander("Save / Load Data", expanded=False):
-    bundle = {
-        "projects": st.session_state.projects,
-        "potential": st.session_state.potential,
-        "actual": st.session_state.actual,
-        "departments": st.session_state.depts,
-    }
-    st.download_button(
-        "Download current data (JSON)",
-        data=json.dumps(bundle, indent=2),
-        file_name="capacity_data.json",
-        mime="application/json",
-        use_container_width=True
-    )
-    uploaded = st.file_uploader("Load data (JSON bundle)", type=["json"])
-    if uploaded:
-        try:
-            loaded = json.load(uploaded)
-            st.session_state.projects  = loaded.get("projects", st.session_state.projects)
-            st.session_state.potential = loaded.get("potential", st.session_state.potential)
-            st.session_state.actual    = loaded.get("actual", st.session_state.actual)
-            st.session_state.depts     = loaded.get("departments", st.session_state.depts)
-            st.success("Data loaded into the app.")
-        except Exception as e:
-            st.error(f"Failed to load JSON: {e}")
 
 st.markdown("---")
 
@@ -216,7 +187,7 @@ html_template = """
   <select id="disciplineSelect"></select>
 
   <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
-  <label><input type="checkbox" id="showActual" checked> Show Actual</label>
+  <label><input type="checkbox" id="showActual"> Show Actual</label>
 
   <label><strong>Productivity:</strong>
     <input type="range" id="prodFactor" min="0.50" max="1.00" step="0.01" value="0.85">
@@ -255,14 +226,17 @@ let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
 
 // -------------------- HELPERS --------------------
-function parseDate(s){ return s.includes("/") ? (()=>{const [m,d,y]=s.split("/");return new Date(+y,+m-1,+d)})() : new Date(s); }
+function parseDate(s){ return s && typeof s === "string" ? new Date(s) : new Date(s); }
 function formatDateLocal(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
 function mondayOf(d){ const t=new Date(d); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); t.setHours(0,0,0,0); return t; }
 
 function getWeekList(){
   let minD=null,maxD=null;
   function expand(arr){ for(const p of arr){ const a=parseDate(p.induction), b=parseDate(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
-  expand(projects); expand(potentialProjects); expand(projectsActual);
+  if(projects.length) expand(projects);
+  if(potentialProjects.length) expand(potentialProjects);
+  if(projectsActual.length) expand(projectsActual);
+  if(!minD || !maxD){ const t=new Date(); const start=mondayOf(t); return [formatDateLocal(start)]; }
   const start=mondayOf(minD); const weeks=[]; const cur=new Date(start);
   while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7); }
   return weeks.map(formatDateLocal);
@@ -276,7 +250,7 @@ function computeWeeklyLoadsDetailed(arr, key, labels){
     for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]); if(L>=a && s===-1) s=i; if(L<=b) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:p.customer, hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
     }
   }
   return {weeklyTotal:total, breakdown};
@@ -293,7 +267,7 @@ function computeWeeklyLoadsActual(arr, key, labels){
     for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]); if(L>=a && s===-1) s=i; if(L<=end) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:p.customer, hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
     }
   }
   return {weeklyTotal:total, breakdown};
@@ -315,21 +289,21 @@ departmentCapacities.forEach(d=>{
 
 const sel = document.getElementById('disciplineSelect');
 departmentCapacities.forEach(d=>{ const o=document.createElement('option'); o.value=d.key; o.textContent=d.name; sel.appendChild(o); });
-sel.value="Interiors";
+sel.value=departmentCapacities[0]?.key || "";
 
 // -------------------- CHART --------------------
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
 function weeklyCapacityFor(key){
   const dept = departmentCapacities.find(x=>x.key===key);
-  const capPerWeek = dept.headcount * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
+  const capPerWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
   return weekLabels.map(()=>capPerWeek);
 }
 function utilizationArray(key, includePotential){
-  const conf = dataConfirmed[key].weeklyTotal;
-  const pot  = dataPotential[key].weeklyTotal;
+  const conf = dataConfirmed[key]?.weeklyTotal || [];
+  const pot  = dataPotential[key]?.weeklyTotal || [];
   const cap  = weeklyCapacityFor(key);
-  return conf.map((v,i)=>{ const load = includePotential ? (v + pot[i]) : v; return cap[i] ? (100 * load / cap[i]) : 0; });
+  return conf.map((v,i)=>{ const load = includePotential ? (v + (pot[i]||0)) : v; return cap[i] ? (100 * load / cap[i]) : 0; });
 }
 
 const todayLabel = (()=>{ const m = mondayOf(new Date()); return formatDateLocal(m); })();
@@ -337,26 +311,26 @@ const annos = { annotations:{ todayLine:{ type:'line', xMin: todayLabel, xMax: t
   label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' } } } };
 
 let showPotential = true;
-let showActual = true;
+let showActual = false; // no actual data by default
 
 let chart = new Chart(ctx,{
   type:'line',
   data:{
     labels: weekLabels,
     datasets:[
-      { label: () => `${dataConfirmed[currentKey].name} Load (hrs)`, data: dataConfirmed[currentKey].weeklyTotal,
+      { label: () => `${(dataConfirmed[currentKey]?.name)||'Dept'} Load (hrs)`, data: (dataConfirmed[currentKey]?.weeklyTotal)||[],
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
         borderWidth:2, fill:true, tension:0.1, pointRadius:0 },
-      { label: () => `${dataConfirmed[currentKey].name} Capacity (hrs)`, data: weeklyCapacityFor(currentKey),
+      { label: () => `${(dataConfirmed[currentKey]?.name)||'Dept'} Capacity (hrs)`, data: weeklyCapacityFor(currentKey),
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
         borderWidth:2, fill:false, borderDash:[6,6], tension:0.1, pointRadius:0 },
-      { label: () => `${dataConfirmed[currentKey].name} Potential (hrs)`, data: dataPotential[currentKey].weeklyTotal,
+      { label: () => `${(dataConfirmed[currentKey]?.name)||'Dept'} Potential (hrs)`, data: (dataPotential[currentKey]?.weeklyTotal)||[],
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--potential-20').trim(),
         borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showPotential },
-      { label: () => `${dataConfirmed[currentKey].name} Actual (hrs)`, data: dataActual[currentKey].weeklyTotal,
+      { label: () => `${(dataConfirmed[currentKey]?.name)||'Dept'} Actual (hrs)`, data: (dataActual[currentKey]?.weeklyTotal)||[],
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
         borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual },
@@ -371,17 +345,17 @@ let chart = new Chart(ctx,{
     scales:{ x:{ title:{display:true, text:'Week Starting'} }, y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
       y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 } },
     plugins:{ annotation: annos, legend:{ position:'top' },
-      title:{ display:true, text: ()=>'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name } },
+      title:{ display:true, text: ()=>'Weekly Load vs. Capacity - ' + ((dataConfirmed[currentKey]?.name)||'Dept') } },
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
       const {datasetIndex, index:weekIndex} = elems[0];
       if(datasetIndex===1 || datasetIndex===4) return;
       let breakdownArr=null, label='';
-      if(datasetIndex===0){ breakdownArr = dataConfirmed[currentKey].breakdown[weekIndex]; label='Confirmed'; }
-      else if(datasetIndex===2){ breakdownArr = dataPotential[currentKey].breakdown[weekIndex]; label='Potential'; }
-      else if(datasetIndex===3){ breakdownArr = dataActual[currentKey].breakdown[weekIndex]; label='Actual'; }
+      if(datasetIndex===0){ breakdownArr = (dataConfirmed[currentKey]?.breakdown||[])[weekIndex]; label='Confirmed'; }
+      else if(datasetIndex===2){ breakdownArr = (dataPotential[currentKey]?.breakdown||[])[weekIndex]; label='Potential'; }
+      else if(datasetIndex===3){ breakdownArr = (dataActual[currentKey]?.breakdown||[])[weekIndex]; label='Actual'; }
       if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in week ${weekLabels[weekIndex]}.`, []); return; }
-      openModal(`Week ${weekLabels[weekIndex]} · ${dataConfirmed[currentKey].name} · ${label}`, breakdownArr);
+      openModal(`Week ${weekLabels[weekIndex]} · ${(dataConfirmed[currentKey]?.name)||'Dept'} · ${label}`, breakdownArr);
     }
   }
 });
@@ -398,32 +372,35 @@ function refreshDatasets(){
   chart.data.datasets[2].hidden = !showPotential;
   chart.data.datasets[3].hidden = !showActual;
   chart.data.datasets[4].data = utilizationArray(currentKey, showPotential);
-  chart.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + dataConfirmed[currentKey].name;
+  chart.options.plugins.title.text = 'Weekly Load vs. Capacity - ' + ((dataConfirmed[currentKey]?.name)||'Dept');
   chart.update();
   updateKPIs();
 }
 function updateKPIs(){
   const cap = weeklyCapacityFor(currentKey)[0] || 0;
-  const conf = dataConfirmed[currentKey].weeklyTotal;
-  const pot  = dataPotential[currentKey].weeklyTotal;
-  const combined = conf.map((v,i)=> v + (showPotential ? pot[i] : 0));
-  let peak=0, peakIdx=0;
-  for(let i=0;i<combined.length;i++){ const u = cap? (combined[i]/cap*100):0; if(u>peak){ peak=u; peakIdx=i; } }
-  let worstDiff = -Infinity, worstIdx = 0;
-  for(let i=0;i<combined.length;i++){ const diff = combined[i] - cap; if(diff>worstDiff){ worstDiff=diff; worstIdx=i; } }
-  document.getElementById('peakUtil').textContent = `${peak.toFixed(0)}% (wk ${weekLabels[peakIdx]})`;
-  const status = worstDiff>=0 ? `+${worstDiff.toFixed(0)} hrs over` : `${(-worstDiff).toFixed(0)} hrs under`;
-  document.getElementById('worstWeek').textContent = `${weekLabels[worstIdx]} · ${status}`;
+  const conf = (dataConfirmed[currentKey]?.weeklyTotal)||[];
+  const pot  = (dataPotential[currentKey]?.weeklyTotal)||[];
+  const combined = conf.map((v,i)=> v + (showPotential ? (pot[i]||0) : 0));
+  let peak=0, peakIdx=0, worstDiff=-Infinity, worstIdx=0;
+  for(let i=0;i<combined.length;i++){
+    const u = cap? (combined[i]/cap*100):0;
+    if(u>peak){ peak=u; peakIdx=i; }
+    const diff = combined[i] - cap;
+    if(diff>worstDiff){ worstDiff=diff; worstIdx=i; }
+  }
+  document.getElementById('peakUtil').textContent = combined.length? `${peak.toFixed(0)}% (wk ${weekLabels[peakIdx]})` : '—';
+  const status = worstDiff>=0 ? `+${isFinite(worstDiff)?worstDiff.toFixed(0):0} hrs over` : `${isFinite(worstDiff)?(-worstDiff).toFixed(0):0} hrs under`;
+  document.getElementById('worstWeek').textContent = combined.length? `${weekLabels[worstIdx]} · ${status}` : '—';
   document.getElementById('weeklyCap').textContent = `${cap.toFixed(0)} hrs / wk`;
 }
 
 sel.addEventListener('change', e=>{
   currentKey = e.target.value;
-  chart.data.datasets[0].label = `${dataConfirmed[currentKey].name} Load (hrs)`;
-  chart.data.datasets[0].data  = dataConfirmed[currentKey].weeklyTotal;
-  chart.data.datasets[1].label = `${dataConfirmed[currentKey].name} Capacity (hrs)`;
-  chart.data.datasets[2].label = `${dataConfirmed[currentKey].name} Potential (hrs)`;
-  chart.data.datasets[3].label = `${dataConfirmed[currentKey].name} Actual (hrs)`;
+  chart.data.datasets[0].label = `${(dataConfirmed[currentKey]?.name)||'Dept'} Load (hrs)`;
+  chart.data.datasets[0].data  = (dataConfirmed[currentKey]?.weeklyTotal)||[];
+  chart.data.datasets[1].label = `${(dataConfirmed[currentKey]?.name)||'Dept'} Capacity (hrs)`;
+  chart.data.datasets[2].label = `${(dataConfirmed[currentKey]?.name)||'Dept'} Potential (hrs)`;
+  chart.data.datasets[3].label = `${(dataConfirmed[currentKey]?.name)||'Dept'} Actual (hrs)`;
   refreshDatasets();
 });
 chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
@@ -460,7 +437,7 @@ refreshDatasets();
 </html>
 """
 
-# Inject the live data into the HTML (avoid f-string brace issues)
+# Inject the live data into the HTML
 html_code = (
     html_template
       .replace("__PROJECTS__", json.dumps(st.session_state.projects))
