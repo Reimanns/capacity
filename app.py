@@ -60,7 +60,7 @@ def dept_keys():
     return [d["key"] for d in st.session_state.depts]
 
 # --------------------- QUICK EDIT (sidebar) ---------------------
-st.sidebar.header("Quick Edit (meeting mode)")
+st.sidebar.header("Quick Edit")
 dataset_choice = st.sidebar.selectbox("Dataset", ["Confirmed","Potential","Actual"])
 dataset_key = {"Confirmed":"projects","Potential":"potential","Actual":"actual"}[dataset_choice]
 current_list = st.session_state[dataset_key]
@@ -188,7 +188,7 @@ html_template = """
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly (workdays)</option>
+      <option value="monthly">Monthly</option>
     </select>
   </label>
 
