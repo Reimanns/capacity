@@ -60,7 +60,7 @@ def dept_keys():
     return [d["key"] for d in st.session_state.depts]
 
 # --------------------- QUICK EDIT (sidebar) ---------------------
-st.sidebar.header("Quick Edit")
+st.sidebar.header("Quick Edit (meeting mode)")
 dataset_choice = st.sidebar.selectbox("Dataset", ["Confirmed","Potential","Actual"])
 dataset_key = {"Confirmed":"projects","Potential":"potential","Actual":"actual"}[dataset_choice]
 current_list = st.session_state[dataset_key]
@@ -155,8 +155,8 @@ html_template = """
     .metric { border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; min-width:220px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background:#fff; }
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
     .metric .value { font-weight:700; font-size:18px; }
-    .chart-wrap { width:100%; height:620px; margin-bottom: 6px; position:relative; }
-    .chart-wrap.util { height:260px; margin-top: 6px; }
+    .chart-wrap { width:100%; height:600px; margin-bottom: 8px; position:relative; }
+    .chart-wrap.util { height:360px; margin-top: 8px; } /* Larger utilization chart */
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
     .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9998; }
@@ -183,7 +183,7 @@ html_template = """
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly</option>
+      <option value="monthly">Monthly (workdays)</option>
     </select>
   </label>
 
@@ -539,7 +539,12 @@ function createUtilChart(){
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { title: { display: true, text: currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting' } },
-        y: { title: { display: true, text: 'Utilization %' }, beginAtZero: true, suggestedMax: 150 }
+        y: {
+          title: { display: true, text: 'Utilization %' },
+          beginAtZero: true,
+          suggestedMax: 160,
+          ticks: { callback: (val) => `${val}%` }
+        }
       },
       plugins: {
         legend: { display: false },
@@ -551,6 +556,20 @@ function createUtilChart(){
               borderColor: '#9ca3af', borderWidth: 1, borderDash: [4,4],
               label: { display: true, content: 'Today', position: 'start', color: '#6b7280',
                        backgroundColor: 'rgba(255,255,255,0.8)' }
+            },
+            target100: {
+              type: 'line',
+              yMin: 100, yMax: 100,            /* horizontal line at 100% */
+              borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+              borderWidth: 2,
+              borderDash: [6,3],
+              label: {
+                display: true,
+                content: '100% target',
+                position: 'end',
+                backgroundColor: 'rgba(255,255,255,0.9)',
+                color: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+              }
             }
           }
         }
@@ -723,4 +742,5 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-components.html(html_code, height=1600, scrolling=False)
+# Make the iframe tall and disable its own scrolling to avoid double scrollbars
+components.html(html_code, height=1500, scrolling=False)
