@@ -57,7 +57,7 @@ if "depts" not in st.session_state:
     st.session_state.depts = deepcopy(DEFAULT_DEPTS)
 
 # --------------------- SIDEBAR: QUICK EDIT ---------------------
-st.sidebar.header("Quick Edit (fast changes during meeting)")
+st.sidebar.header("Quick Edit")
 dataset_choice = st.sidebar.selectbox("Dataset to modify", ["Confirmed","Potential","Actual"])
 dataset_key = {"Confirmed":"projects","Potential":"potential","Actual":"actual"}[dataset_choice]
 current_list = st.session_state[dataset_key]
