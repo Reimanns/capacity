@@ -723,4 +723,4 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-components.html(html_code, height=1020, scrolling=True)
+components.html(html_code, height=1600, scrolling=False)
