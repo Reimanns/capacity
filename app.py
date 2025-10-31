@@ -7,7 +7,10 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 st.set_page_config(layout="wide", page_title="Labor Capacity Dashboard")
-st.image("citadel_logo.png", width=200)
+try:
+    st.image("citadel_logo.png", width=200)
+except Exception:
+    pass
 
 # --------------------- DEFAULT DATA (YOUR SET) ---------------------
 DEFAULT_PROJECTS = [
@@ -30,7 +33,7 @@ DEFAULT_POTENTIAL = [
     {"number":"P7690","customer":"Sands","aircraftModel":None,"scope":"C1,C2,C7 Mx","induction":"2025-05-25T00:00:00","delivery":"2025-07-22T00:00:00","Maintenance":3227.14,"Structures":2189.85,"Avionics":922.04,"Inspection":1152.55,"Interiors":4033.92,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
     {"number":"P7691","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C2,C3,C7 Mx","induction":"2026-10-13T00:00:00","delivery":"2026-12-22T00:00:00","Maintenance":4038.3,"Structures":5115.18,"Avionics":1076.88,"Inspection":1346.1,"Interiors":1884.54,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
 ]
-DEFAULT_ACTUAL = []  # start empty; can be edited in-app
+DEFAULT_ACTUAL = []
 DEFAULT_DEPTS = [
     {"name":"Maintenance","headcount":36,"key":"Maintenance"},
     {"name":"Structures","headcount":22,"key":"Structures"},
@@ -127,7 +130,7 @@ with st.expander("Edit Department Headcounts", expanded=False):
 
 st.markdown("---")
 
-# --------------------- HTML/JS (weekly + monthly workdays) ---------------------
+# --------------------- HTML/JS (weekly + monthly, workdays, tz-safe) ---------------------
 html_template = """
 <!DOCTYPE html>
 <html>
@@ -179,7 +182,7 @@ html_template = """
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly</option>
+      <option value="monthly">Monthly (workdays)</option>
     </select>
   </label>
 
@@ -218,10 +221,17 @@ const departmentCapacities = __DEPTS__;
 let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
 
-// -------------------- DATE HELPERS --------------------
-function parseDate(s){ return new Date(s); }
-function formatDateLocal(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,"0"); const da=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${da}`; }
-function mondayOf(d){ const t=new Date(d); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); t.setHours(0,0,0,0); return t; }
+// -------------------- TZ-SAFE DATE HELPERS --------------------
+// Always build Date(y,m-1,d) so there is no UTC parsing shift.
+function parseDateLocalISO(s){
+  // Accepts "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS"
+  if(!s) return new Date(NaN);
+  const t = String(s).split('T')[0];
+  const [y,m,d] = t.split('-').map(Number);
+  return new Date(y, (m||1)-1, d||1);
+}
+function ymd(d){ return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); }
+function mondayOf(d){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); return t; }
 function firstOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function lastOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
 
@@ -235,33 +245,33 @@ function workdaysInclusive(a,b){
   return c;
 }
 function workdaysInMonth(d){
-  const mStart = new Date(d.getFullYear(), d.getMonth(), 1);
-  const mEnd   = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  const mStart = firstOfMonth(d);
+  const mEnd   = lastOfMonth(d);
   return workdaysInclusive(mStart, mEnd);
 }
 
 function getWeekList(){
   let minD=null,maxD=null;
-  function expand(arr){ for(const p of arr){ const a=parseDate(p.induction), b=parseDate(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
+  function expand(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
   if(projects.length) expand(projects);
   if(potentialProjects.length) expand(potentialProjects);
   if(projectsActual.length) expand(projectsActual);
-  if(!minD||!maxD){ const start=mondayOf(new Date()); return [formatDateLocal(start)]; }
+  if(!minD||!maxD){ const start=mondayOf(new Date()); return [ymd(start)]; }
   const start=mondayOf(minD); const weeks=[]; const cur=new Date(start);
   while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7); }
-  return weeks.map(formatDateLocal);
+  return weeks.map(ymd);
 }
 function getMonthList(){
   let minD=null,maxD=null;
-  function expand(arr){ for(const p of arr){ const a=parseDate(p.induction), b=parseDate(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
+  function expand(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
   if(projects.length) expand(projects);
   if(potentialProjects.length) expand(potentialProjects);
   if(projectsActual.length) expand(projectsActual);
-  if(!minD||!maxD){ const start=firstOfMonth(new Date()); return [formatDateLocal(start)]; }
+  if(!minD||!maxD){ const start=firstOfMonth(new Date()); return [ymd(start)]; }
   const start=firstOfMonth(minD); const end=firstOfMonth(maxD);
   const months=[]; const cur=new Date(start);
   while(cur<=end){ months.push(new Date(cur)); cur.setMonth(cur.getMonth()+1); }
-  return months.map(formatDateLocal);
+  return months.map(ymd);
 }
 
 // -------------------- WEEKLY LOADS --------------------
@@ -269,9 +279,9 @@ function computeWeeklyLoadsDetailed(arr, key, labels){
   const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction), b=parseDate(p.delivery);
+    const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery);
     let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]); if(L>=a && s===-1) s=i; if(L<=b) e=i; }
+    for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=b) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
       for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
@@ -284,11 +294,11 @@ function computeWeeklyLoadsActual(arr, key, labels){
   const today=new Date();
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction), planned=parseDate(p.delivery);
+    const a=parseDateLocalISO(p.induction), planned=parseDateLocalISO(p.delivery);
     const end = (a>today) ? planned : (planned<today? planned : today);
     if(end<a) continue;
     let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){ const L=new Date(labels[i]); if(L>=a && s===-1) s=i; if(L<=end) e=i; }
+    for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=end) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
       for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
@@ -297,16 +307,16 @@ function computeWeeklyLoadsActual(arr, key, labels){
   return {series:total, breakdown};
 }
 
-// -------------------- MONTHLY LOADS (workdays only) --------------------
+// -------------------- MONTHLY LOADS (workdays only, tz-safe) --------------------
 function computeMonthlyLoadsDetailed(arr, key, monthLabels){
   const total=new Array(monthLabels.length).fill(0); const breakdown=monthLabels.map(()=>[]);
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
-    const start=parseDate(p.induction), end=parseDate(p.delivery);
+    const start=parseDateLocalISO(p.induction), end=parseDateLocalISO(p.delivery);
     const projWD = Math.max(1, workdaysInclusive(start, end));
     for(let i=0;i<monthLabels.length;i++){
-      const mStart = new Date(monthLabels[i]);
-      const mEnd   = new Date(mStart.getFullYear(), mStart.getMonth()+1, 0);
+      const mStart = parseDateLocalISO(monthLabels[i]);
+      const mEnd   = lastOfMonth(mStart);
       const overlapStart = new Date(Math.max(mStart, start));
       const overlapEnd   = new Date(Math.min(mEnd, end));
       if(overlapEnd >= overlapStart){
@@ -324,13 +334,13 @@ function computeMonthlyLoadsActual(arr, key, monthLabels){
   const today=new Date();
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
-    const a=parseDate(p.induction), planned=parseDate(p.delivery);
+    const a=parseDateLocalISO(p.induction), planned=parseDateLocalISO(p.delivery);
     const end = (a>today) ? planned : (planned<today? planned : today);
     if(end<a) continue;
     const projWD = Math.max(1, workdaysInclusive(a, end));
     for(let i=0;i<monthLabels.length;i++){
-      const mStart = new Date(monthLabels[i]);
-      const mEnd   = new Date(mStart.getFullYear(), mStart.getMonth()+1, 0);
+      const mStart = parseDateLocalISO(monthLabels[i]);
+      const mEnd   = lastOfMonth(mStart);
       const overlapStart = new Date(Math.max(mStart, a));
       const overlapEnd   = new Date(Math.min(mEnd, end));
       if(overlapEnd >= overlapStart){
@@ -352,14 +362,13 @@ const dataWConfirmed = {}, dataWPotential = {}, dataWActual = {};
 const dataMConfirmed = {}, dataMPotential = {}, dataMActual = {};
 
 departmentCapacities.forEach(d=>{
-  // weekly
   const cw=computeWeeklyLoadsDetailed(projects, d.key, weekLabels);
   const pw=computeWeeklyLoadsDetailed(potentialProjects, d.key, weekLabels);
   const aw=computeWeeklyLoadsActual(projectsActual, d.key, weekLabels);
   dataWConfirmed[d.key]={name:d.name, series:cw.series, breakdown:cw.breakdown};
   dataWPotential[d.key]={name:d.name, series:pw.series, breakdown:pw.breakdown};
   dataWActual[d.key]   ={name:d.name, series:aw.series, breakdown:aw.breakdown};
-  // monthly (workdays)
+
   const cm=computeMonthlyLoadsDetailed(projects, d.key, monthLabels);
   const pm=computeMonthlyLoadsDetailed(potentialProjects, d.key, monthLabels);
   const am=computeMonthlyLoadsActual(projectsActual, d.key, monthLabels);
@@ -383,13 +392,12 @@ const periodSel = document.getElementById('periodSel');
 // -------------------- CAPACITY & UTILIZATION --------------------
 function capacityArray(key, labels, period){
   const dept = departmentCapacities.find(x=>x.key===key);
-  const capPerWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR; // weekly work capacity (5 workdays)
+  const capPerWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR; // 5 workdays
   if(period==='weekly') return labels.map(()=>capPerWeek);
-  // monthly: pro-rate by number of workdays in month (weekly cap represents 5 workdays)
   return labels.map(lbl=>{
-    const d = new Date(lbl);
+    const d = parseDateLocalISO(lbl);
     const wd = workdaysInMonth(d); // Mon–Fri count
-    return (capPerWeek / 5) * wd;
+    return (capPerWeek / 5) * wd;  // scale weekly capacity by #workdays
   });
 }
 function utilizationArray(period, key, includePotential){
@@ -402,8 +410,8 @@ function utilizationArray(period, key, includePotential){
   return conf.map((v,i)=>{ const load = includePotential ? v + (pot[i]||0) : v; return cap[i] ? (100*load/cap[i]) : 0; });
 }
 
-const weekTodayLabel = formatDateLocal(mondayOf(new Date()));
-const monthTodayLabel = formatDateLocal(firstOfMonth(new Date()));
+const weekTodayLabel = ymd(mondayOf(new Date()));
+const monthTodayLabel = ymd(firstOfMonth(new Date()));
 const annos = { annotations:{ todayLine:{ type:'line', xMin: weekTodayLabel, xMax: weekTodayLabel,
   borderColor:'#9ca3af', borderWidth:1, borderDash:[4,4],
   label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' } } } };
@@ -496,7 +504,6 @@ function updateKPIs(){
   document.getElementById('peakUtil').textContent = combined.length? `${peak.toFixed(0)}% (${currentPeriod==='weekly'?'wk':'mo'} ${labels[peakIdx]})` : '—';
   const status = worstDiff>=0 ? `+${isFinite(worstDiff)?worstDiff.toFixed(0):0} hrs over` : `${isFinite(worstDiff)?(-worstDiff).toFixed(0):0} hrs under`;
   document.getElementById('worstWeek').textContent = combined.length? `${labels[worstIdx]} · ${status}` : '—';
-  // Display capacity for current period unit
   const capUnit = currentPeriod==='weekly' ? `${capArr[0]?.toFixed(0)||0} hrs / wk` : `~${(capArr[0]||0).toFixed(0)} hrs / mo (workdays)`;
   document.getElementById('weeklyCap').textContent = capUnit;
 }
@@ -505,7 +512,6 @@ function refreshDatasets(){
   const labels = currentLabels();
   chart.data.labels = labels;
 
-  // retarget series
   const deptName = (dataMap('c')[currentKey]?.name)||'Dept';
   chart.data.datasets[0].label = `${deptName} Load (hrs)`;
   chart.data.datasets[0].data  = (dataMap('c')[currentKey]?.series)||[];
@@ -521,7 +527,6 @@ function refreshDatasets(){
   // utilization
   chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
 
-  // styling by period
   const monthly = currentPeriod==='monthly';
   chart.data.datasets.forEach((ds, i)=>{
     ds.tension = monthly ? 0 : 0.1;
@@ -530,7 +535,6 @@ function refreshDatasets(){
   chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
   chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
 
-  // move "Today" marker
   chart.options.plugins.annotation.annotations.todayLine.xMin = monthly ? monthTodayLabel : weekTodayLabel;
   chart.options.plugins.annotation.annotations.todayLine.xMax = monthly ? monthTodayLabel : weekTodayLabel;
 
