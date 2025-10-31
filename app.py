@@ -130,7 +130,7 @@ with st.expander("Edit Department Headcounts", expanded=False):
 
 st.markdown("---")
 
-# --------------------- HTML/JS (weekly + monthly, workdays, tz-safe) ---------------------
+# --------------------- HTML/JS ---------------------
 html_template = """
 <!DOCTYPE html>
 <html>
@@ -159,7 +159,7 @@ html_template = """
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
     .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9998; }
-    .modal { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#fff; border-radius:12px; width:min(800px,92vw); max-height:80vh; overflow:auto; z-index:9999; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
+    .modal { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#fff; border-radius:12px; width:min(860px,92vw); max-height:80vh; overflow:auto; z-index:9999; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
     .modal header { padding:14px 16px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;}
     .modal header h3 { margin:0; font-size:16px;}
     .modal .content { padding:12px 16px 18px; }
@@ -203,12 +203,17 @@ html_template = """
 </div>
 
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
-<p class="footnote">Tip: click a line/area (Load, Potential, Actual) to see the period’s customer breakdown.</p>
+<p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
 <div class="modal-backdrop" id="modalBackdrop"></div>
 <div class="modal" id="drilldownModal">
   <header><h3 id="modalTitle">Breakdown</h3><button class="close-btn" id="closeModal">Close</button></header>
-  <div class="content"><table><thead><tr><th>Customer</th><th>Hours</th></tr></thead><tbody id="modalBody"></tbody></table></div>
+  <div class="content">
+    <table>
+      <thead id="modalHead"><tr><th>Customer</th><th>Hours</th></tr></thead>
+      <tbody id="modalBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -222,9 +227,7 @@ let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
 
 // -------------------- TZ-SAFE DATE HELPERS --------------------
-// Always build Date(y,m-1,d) so there is no UTC parsing shift.
 function parseDateLocalISO(s){
-  // Accepts "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS"
   if(!s) return new Date(NaN);
   const t = String(s).split('T')[0];
   const [y,m,d] = t.split('-').map(Number);
@@ -234,8 +237,6 @@ function ymd(d){ return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0')
 function mondayOf(d){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); return t; }
 function firstOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function lastOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
-
-// ---- Workday helpers (Mon–Fri) ----
 function isWorkday(d){ const day = d.getDay(); return day >= 1 && day <= 5; }
 function workdaysInclusive(a,b){
   const start = new Date(a.getFullYear(), a.getMonth(), a.getDate());
@@ -250,6 +251,7 @@ function workdaysInMonth(d){
   return workdaysInclusive(mStart, mEnd);
 }
 
+// -------------------- LABELS --------------------
 function getWeekList(){
   let minD=null,maxD=null;
   function expand(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
@@ -307,7 +309,7 @@ function computeWeeklyLoadsActual(arr, key, labels){
   return {series:total, breakdown};
 }
 
-// -------------------- MONTHLY LOADS (workdays only, tz-safe) --------------------
+// -------------------- MONTHLY LOADS (workdays only) --------------------
 function computeMonthlyLoadsDetailed(arr, key, monthLabels){
   const total=new Array(monthLabels.length).fill(0); const breakdown=monthLabels.map(()=>[]);
   for(const p of arr){
@@ -392,12 +394,12 @@ const periodSel = document.getElementById('periodSel');
 // -------------------- CAPACITY & UTILIZATION --------------------
 function capacityArray(key, labels, period){
   const dept = departmentCapacities.find(x=>x.key===key);
-  const capPerWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR; // 5 workdays
+  const capPerWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
   if(period==='weekly') return labels.map(()=>capPerWeek);
   return labels.map(lbl=>{
     const d = parseDateLocalISO(lbl);
-    const wd = workdaysInMonth(d); // Mon–Fri count
-    return (capPerWeek / 5) * wd;  // scale weekly capacity by #workdays
+    const wd = workdaysInMonth(d);
+    return (capPerWeek / 5) * wd;  // scale by workdays
   });
 }
 function utilizationArray(period, key, includePotential){
@@ -474,14 +476,38 @@ let chart = new Chart(ctx,{
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
       const {datasetIndex, index:idx} = elems[0];
-      if(datasetIndex===1 || datasetIndex===4) return;
+      if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
+
       const labels = currentLabels();
-      let breakdownArr=null, label='';
-      if(datasetIndex===0){ breakdownArr = (dataMap('c')[currentKey]?.breakdown||[])[idx]; label=(currentPeriod==='weekly'?'Confirmed (wk)':'Confirmed (mo, workdays)'); }
-      else if(datasetIndex===2){ breakdownArr = (dataMap('p')[currentKey]?.breakdown||[])[idx]; label=(currentPeriod==='weekly'?'Potential (wk)':'Potential (mo, workdays)'); }
-      else if(datasetIndex===3){ breakdownArr = (dataMap('a')[currentKey]?.breakdown||[])[idx]; label=(currentPeriod==='weekly'?'Actual (wk)':'Actual (mo, workdays)'); }
-      if(!breakdownArr || breakdownArr.length===0){ openModal(`No ${label} hours in ${labels[idx]}.`, []); return; }
-      openModal(`${labels[idx]} · ${(dataMap('c')[currentKey]?.name)||'Dept'} · ${label}`, breakdownArr);
+      const name = (dataMap('c')[currentKey]?.name)||'Dept';
+      const isMonthly = currentPeriod==='monthly';
+
+      // get period-specific breakdown arrays
+      const mapC = dataMap('c')[currentKey]?.breakdown || [];
+      const mapP = dataMap('p')[currentKey]?.breakdown || [];
+      const mapA = dataMap('a')[currentKey]?.breakdown || [];
+
+      if(datasetIndex===0){
+        // Clicked CONFIRMED. If "Show Potential" is on, show combined table.
+        const bc = mapC[idx] || [];
+        const includePot = document.getElementById('showPotential').checked;
+        const bp = includePot ? (mapP[idx] || []) : [];
+
+        if(includePot && bp.length){
+          const rows = mergeConfirmedPotential(bc, bp); // [{customer, conf, pot, total}]
+          openModalCombined(`${labels[idx]} · ${name} · ${isMonthly?'Monthly':'Weekly'}`, rows);
+        } else {
+          openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Confirmed (mo, workdays)':'Confirmed (wk)'}`, bc);
+        }
+      } else if(datasetIndex===2){
+        // Clicked POTENTIAL line => show potential-only
+        const bp = mapP[idx] || [];
+        openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Potential (mo, workdays)':'Potential (wk)'}`, bp);
+      } else if(datasetIndex===3){
+        // Clicked ACTUAL line => show actual-only
+        const ba = mapA[idx] || [];
+        openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`, ba);
+      }
     }
   }
 });
@@ -493,7 +519,6 @@ function updateKPIs(){
   const conf = (dataMap('c')[currentKey]?.series)||[];
   const pot  = (dataMap('p')[currentKey]?.series)||[];
   const combined = conf.map((v,i)=> v + (showPotential ? (pot[i]||0) : 0));
-  // Peak utilization per period
   let peak=0, peakIdx=0, worstDiff=-Infinity, worstIdx=0;
   for(let i=0;i<combined.length;i++){
     const u = capArr[i] ? (combined[i]/capArr[i]*100) : 0;
@@ -524,7 +549,6 @@ function refreshDatasets(){
   chart.data.datasets[2].hidden = !showPotential;
   chart.data.datasets[3].hidden = !showActual;
 
-  // utilization
   chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
 
   const monthly = currentPeriod==='monthly';
@@ -561,17 +585,44 @@ periodSel.addEventListener('change', e=>{
   refreshDatasets();
 });
 
-// -------------------- MODAL --------------------
+// -------------------- MODAL (single vs combined) --------------------
 const backdrop = document.getElementById('modalBackdrop');
 const modal = document.getElementById('drilldownModal');
 const modalTitle = document.getElementById('modalTitle');
+const modalHead = document.getElementById('modalHead');
 const modalBody = document.getElementById('modalBody');
 document.getElementById('closeModal').addEventListener('click', closeModal);
 backdrop.addEventListener('click', closeModal);
 
-function openModal(title, rows){
+function openModalSingle(title, rows){
   modalTitle.textContent = title;
-  modalBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join('') || `<tr><td colspan="2">No data</td></tr>`;
+  modalHead.innerHTML = "<tr><th>Customer</th><th>Hours</th></tr>";
+  modalBody.innerHTML = (rows&&rows.length)
+    ? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join('')
+    : `<tr><td colspan="2">No data</td></tr>`;
+  backdrop.style.display='block'; modal.style.display='block';
+}
+function mergeConfirmedPotential(bc, bp){
+  const map = new Map();
+  (bc||[]).forEach(r=>{
+    map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0});
+  });
+  (bp||[]).forEach(r=>{
+    if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0); }
+    else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)}); }
+  });
+  const rows = Array.from(map.values()).map(x=>({ ...x, total: (x.conf + x.pot) }));
+  rows.sort((a,b)=> b.total - a.total);
+  return rows;
+}
+function openModalCombined(title, rows){
+  modalTitle.textContent = title + " · Confirmed + Potential";
+  modalHead.innerHTML = "<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>";
+  if(rows&&rows.length){
+    modalBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('');
+  } else {
+    modalBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
+  }
   backdrop.style.display='block'; modal.style.display='block';
 }
 function closeModal(){ backdrop.style.display='none'; modal.style.display='none'; }
