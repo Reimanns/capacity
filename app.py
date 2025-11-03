@@ -60,7 +60,7 @@ def dept_keys():
     return [d["key"] for d in st.session_state.depts]
 
 # --------------------- QUICK EDIT (sidebar) ---------------------
-st.sidebar.header("Quick Edit")
+st.sidebar.header("Quick Edit (meeting mode)")
 dataset_choice = st.sidebar.selectbox("Dataset", ["Confirmed","Potential","Actual"])
 dataset_key = {"Confirmed":"projects","Potential":"potential","Actual":"actual"}[dataset_choice]
 current_list = st.session_state[dataset_key]
@@ -114,13 +114,13 @@ if reset_btn:
 with st.expander("Bulk Edit: Confirmed / Potential / Actual", expanded=False):
     c1, c2, c3 = st.columns(3)
     with c1:
-        df_proj = st.data_editor(pd.DataFrame(st.session_state.projects), key="ed_confirmed", height=350)
+        df_proj = st.data_editor(pd.DataFrame(st.session_state.projects), key="ed_confirmed", height=300)
         st.session_state.projects = df_proj.astype(object).to_dict(orient="records")
     with c2:
-        df_pot = st.data_editor(pd.DataFrame(st.session_state.potential), key="ed_potential", height=350)
+        df_pot = st.data_editor(pd.DataFrame(st.session_state.potential), key="ed_potential", height=300)
         st.session_state.potential = df_pot.astype(object).to_dict(orient="records")
     with c3:
-        df_act = st.data_editor(pd.DataFrame(st.session_state.actual), key="ed_actual", height=350)
+        df_act = st.data_editor(pd.DataFrame(st.session_state.actual), key="ed_actual", height=300)
         st.session_state.actual = df_act.astype(object).to_dict(orient="records")
 
 with st.expander("Edit Department Headcounts", expanded=False):
@@ -148,30 +148,43 @@ html_template = """
       --muted:#6b7280;
     }
     html, body { height:100%; }
-    body { font-family: Arial, sans-serif; margin: 8px 20px 24px; overflow-y:auto; }
+    body { font-family: Arial, sans-serif; margin: 8px 14px 24px; overflow-x:hidden; }
     h1 { text-align:center; margin: 6px 0 4px; }
     .controls { display:flex; gap:16px; flex-wrap:wrap; align-items:center; justify-content:center; margin: 8px auto 10px; }
     .controls label { font-size:14px; display:flex; align-items:center; gap:6px; }
-    .metric-bar { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin: 8px 0 14px; }
+    .metric-bar { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin: 8px 0 10px; }
     .metric { border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; min-width:220px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background:#fff; }
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
     .metric .value { font-weight:700; font-size:18px; }
-    .chart-wrap { width:100%; height:660px; margin-bottom: 8px; position:relative; }
+    .chart-wrap { width:100%; height:720px; margin-bottom: 8px; position:relative; }
     .chart-wrap.util { height:380px; margin-top: 8px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
-    .modal-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9998; }
-    .modal {
-      display:none; position:fixed; left:50%; transform:translate(-50%, 0);
-      background:#fff; border-radius:12px; width:min(860px,92vw);
-      max-height:74vh; overflow:auto; z-index:9999; box-shadow:0 8px 32px rgba(0,0,0,0.2);
+    /* Anchored popover for drilldown */
+    .popover {
+      display:none; position:fixed; z-index:9999; max-width:min(92vw, 900px);
+      background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.2);
     }
-    .modal header { padding:14px 16px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;}
-    .modal header h3 { margin:0; font-size:16px;}
-    .modal .content { padding:12px 16px 18px; }
-    .modal table { width:100%; border-collapse:collapse; }
-    .modal th, .modal td { border-bottom:1px solid #eee; padding:8px; text-align:left; font-size:14px;}
-    .close-btn { cursor:pointer; border:none; background:#f3f4f6; padding:6px 10px; border-radius:8px; }
+    .popover header { padding:10px 12px; border-bottom:1px solid #eee; font-weight:600; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .popover header button { border:none; background:#f3f4f6; border-radius:8px; padding:4px 8px; cursor:pointer; }
+    .popover .content { padding:10px 12px 12px; max-height:60vh; overflow:auto; }
+    .popover table { width:100%; border-collapse:collapse; }
+    .popover th, .popover td { border-bottom:1px solid #eee; padding:6px 8px; text-align:left; font-size:13px; }
+
+    /* What-If panel */
+    .impact-grid{
+      display:grid; gap:10px; grid-template-columns: repeat(6, minmax(120px,1fr));
+      align-items:end; margin:10px 0 6px;
+    }
+    .impact-grid label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
+    .impact-grid input, .impact-grid select, .impact-grid button{ padding:8px; border:1px solid #e5e7eb; border-radius:8px; font-size:13px;}
+    .impact-grid button{ cursor:pointer; background:#111827; color:#fff; border-color:#111827; }
+    .impact-box{ border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff; font-size:13px;}
+    .impact-table{ width:100%; border-collapse:collapse; margin-top:6px; }
+    .impact-table th,.impact-table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:left; }
+
+    details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
+    details.impact summary{ cursor:pointer; font-weight:600; }
   </style>
 </head>
 <body>
@@ -188,7 +201,7 @@ html_template = """
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly</option>
+      <option value="monthly">Monthly (workdays)</option>
     </select>
   </label>
 
@@ -210,18 +223,59 @@ html_template = """
   <div class="metric"><div class="label">Capacity</div><div class="value" id="weeklyCap">—</div></div>
 </div>
 
+<!-- What-If Schedule Impact -->
+<details class="impact">
+  <summary>What-If Schedule Impact</summary>
+  <div class="impact-grid">
+    <label>Source dataset
+      <select id="impactSource">
+        <option value="potential" selected>Potential</option>
+        <option value="confirmed">Confirmed</option>
+      </select>
+    </label>
+    <label>Project
+      <select id="impactProject"></select>
+    </label>
+    <label>Scope multiplier
+      <input id="impactMult" type="number" step="0.05" value="1.00">
+    </label>
+    <label>Min lead (days)
+      <input id="impactLead" type="number" step="1" value="14">
+    </label>
+    <label>Overtime (+% cap)
+      <input id="impactOT" type="number" step="5" value="0">
+    </label>
+    <label>Target util (%)
+      <input id="impactTarget" type="number" step="5" value="100">
+    </label>
+
+    <label>Induction override
+      <input type="date" id="impactInd">
+    </label>
+    <label>Delivery override
+      <input type="date" id="impactDel">
+    </label>
+
+    <button id="impactRun">Calculate Impact</button>
+  </div>
+  <div id="impactResult" class="impact-box"></div>
+</details>
+
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
 <div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
-<div class="modal-backdrop" id="modalBackdrop"></div>
-<div class="modal" id="drilldownModal">
-  <header><h3 id="modalTitle">Breakdown</h3><button class="close-btn" id="closeModal">Close</button></header>
+<!-- Anchored popover -->
+<div class="popover" id="drillPopover" role="dialog" aria-modal="true" aria-labelledby="popTitle">
+  <header>
+    <div id="popTitle">Breakdown</div>
+    <button id="closePop">Close</button>
+  </header>
   <div class="content">
     <table>
-      <thead id="modalHead"><tr><th>Customer</th><th>Hours</th></tr></thead>
-      <tbody id="modalBody"></tbody>
+      <thead id="popHead"><tr><th>Customer</th><th>Hours</th></tr></thead>
+      <tbody id="popBody"></tbody>
     </table>
   </div>
 </div>
@@ -437,7 +491,6 @@ let showPotential = true;
 let showActual = false;
 let utilSeparate = true;
 let utilChart = null;
-let lastClickY = null; // track click Y for anchored modal
 
 function currentLabels(){ return currentPeriod==='weekly' ? weekLabels : monthLabels; }
 function dataMap(kind){
@@ -471,7 +524,7 @@ let chart = new Chart(ctx,{
         borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual },
       { label: 'Utilization %', data: utilizationArray(currentPeriod, currentKey, showPotential),
         borderColor:'#374151', backgroundColor:'rgba(55,65,81,0.12)',
-        yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0, hidden: false }
+        yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0 }
     ]
   },
   options:{
@@ -489,8 +542,6 @@ let chart = new Chart(ctx,{
     },
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
-      const native = evt?.native || evt;
-      lastClickY = (native?.clientY ?? null); // capture click Y for anchoring
       const {datasetIndex, index:idx} = elems[0];
       if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
 
@@ -502,23 +553,33 @@ let chart = new Chart(ctx,{
       const mapP = dataMap('p')[currentKey]?.breakdown || [];
       const mapA = dataMap('a')[currentKey]?.breakdown || [];
 
+      const includePot = document.getElementById('showPotential').checked;
+
+      let title='', rows=null, combined=false;
       if(datasetIndex===0){
         const bc = mapC[idx] || [];
-        const includePot = document.getElementById('showPotential').checked;
         const bp = includePot ? (mapP[idx] || []) : [];
         if(includePot && bp.length){
-          const rows = mergeConfirmedPotential(bc, bp);
-          openModalCombined(`${labels[idx]} · ${name} · ${isMonthly?'Monthly':'Weekly'}`, rows);
+          rows = mergeConfirmedPotential(bc, bp); combined=true;
+          title = `${labels[idx]} · ${name} · ${isMonthly?'Monthly':'Weekly'} · Confirmed + Potential`;
         } else {
-          openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Confirmed (mo, workdays)':'Confirmed (wk)'}`, bc);
+          rows = bc;
+          title = `${labels[idx]} · ${name} · ${isMonthly?'Confirmed (mo, workdays)':'Confirmed (wk)'}`;
         }
       } else if(datasetIndex===2){
-        const bp = mapP[idx] || [];
-        openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Potential (mo, workdays)':'Potential (wk)'}`, bp);
+        rows = mapP[idx] || [];
+        title = `${labels[idx]} · ${name} · ${isMonthly?'Potential (mo, workdays)':'Potential (wk)'}`;
       } else if(datasetIndex===3){
-        const ba = mapA[idx] || [];
-        openModalSingle(`${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`, ba);
-      }
+        rows = mapA[idx] || [];
+        title = `${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`;
+      } else { return; }
+
+      // anchor popover near click
+      const native = evt?.native || evt?.nativeEvent || evt;
+      const cx = (native?.clientX ?? 200);
+      const cy = (native?.clientY ?? 200);
+      if(combined) openPopoverCombined(title, rows, cx, cy);
+      else openPopoverSingle(title, rows, cx, cy);
     }
   }
 });
@@ -538,7 +599,7 @@ function createUtilChart(){
         backgroundColor: 'rgba(17,24,39,0.10)',
         borderWidth: 2,
         pointRadius: 0,
-        fill: true,
+        fill: false,
         tension: (currentPeriod==='monthly') ? 0 : 0.1,
       }]
     },
@@ -592,11 +653,11 @@ function rebuildUtilChart(){
     wrap.style.display = 'block';
     if (utilChart) { utilChart.destroy(); utilChart = null; }
     createUtilChart();
-    chart.data.datasets[4].hidden = true; // hide % on main chart
+    chart.data.datasets[4].hidden = true; // hide on main chart
   } else {
     wrap.style.display = 'none';
     if (utilChart) { utilChart.destroy(); utilChart = null; }
-    chart.data.datasets[4].hidden = false; // show % on main chart
+    chart.data.datasets[4].hidden = false; // show on main chart
   }
   chart.update();
 }
@@ -681,7 +742,7 @@ hoursInput.addEventListener('change', e=>{
   refreshDatasets();
 });
 periodSel.addEventListener('change', e=>{
-  currentPeriod = e.target.value;
+  currentPeriod = e.target.value; 
   refreshDatasets();
 });
 utilSepChk.addEventListener('change', e=>{
@@ -689,62 +750,281 @@ utilSepChk.addEventListener('change', e=>{
   rebuildUtilChart();
 });
 
-// -------------------- MODAL (anchored near click) --------------------
-const backdrop = document.getElementById('modalBackdrop');
-const modal = document.getElementById('drilldownModal');
-const modalTitle = document.getElementById('modalTitle');
-const modalHead = document.getElementById('modalHead');
-const modalBody = document.getElementById('modalBody');
-document.getElementById('closeModal').addEventListener('click', closeModal);
-backdrop.addEventListener('click', closeModal);
+// -------------------- POPOVER (single vs combined), anchored near click --------------------
+const pop = document.getElementById('drillPopover');
+const popTitle = document.getElementById('popTitle');
+const popHead = document.getElementById('popHead');
+const popBody = document.getElementById('popBody');
+document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
 
-function positionModalNearClick(){
-  const minPad=16, defaultTop=Math.round(window.innerHeight*0.18);
-  modal.style.visibility='hidden'; modal.style.display='block';
-  const mh=modal.getBoundingClientRect().height || 360;
-  let topPx=defaultTop;
-  if(lastClickY!=null){ topPx=Math.round(lastClickY - mh*0.35); }
-  topPx=Math.max(minPad, Math.min(topPx, window.innerHeight - mh - minPad));
-  modal.style.top = topPx + 'px';
-  modal.style.visibility='visible';
+function clamp(val, min, max){ return Math.max(min, Math.min(max, val)); }
+function placePopoverAt(x, y){
+  const rect = pop.getBoundingClientRect();
+  const pad = 12;
+  const vw = window.innerWidth; const vh = window.innerHeight;
+  let left = x + 14; // offset a bit to the right of cursor
+  let top  = y - 10;
+  if (left + rect.width + pad > vw) left = vw - rect.width - pad;
+  if (top + rect.height + pad > vh) top = vh - rect.height - pad;
+  if (top < pad) top = pad;
+  if (left < pad) left = pad;
+  pop.style.left = left + "px";
+  pop.style.top  = top  + "px";
 }
 
-function openModalSingle(title, rows){
-  modalTitle.textContent = title;
-  modalHead.innerHTML = "<tr><th>Customer</th><th>Hours</th></tr>";
-  modalBody.innerHTML = (rows&&rows.length)
+function openPopoverSingle(title, rows, x, y){
+  popTitle.textContent = title;
+  popHead.innerHTML = "<tr><th>Customer</th><th>Hours</th></tr>";
+  popBody.innerHTML = (rows&&rows.length)
     ? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join('')
     : `<tr><td colspan="2">No data</td></tr>`;
-  backdrop.style.display='block';
-  positionModalNearClick();
+  pop.style.display='block';
+  placePopoverAt(x, y);
 }
 function mergeConfirmedPotential(bc, bp){
   const map = new Map();
   (bc||[]).forEach(r=>{
-    const key = r.customer;
-    map.set(key, {customer:r.customer, conf: (r.hours||0), pot: 0});
+    map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0});
   });
   (bp||[]).forEach(r=>{
-    const key = r.customer;
-    if(map.has(key)){ map.get(key).pot += (r.hours||0); }
-    else { map.set(key, {customer:r.customer, conf:0, pot:(r.hours||0)}); }
+    if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0); }
+    else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)}); }
   });
   const rows = Array.from(map.values()).map(x=>({ ...x, total: (x.conf + x.pot) }));
   rows.sort((a,b)=> b.total - a.total);
   return rows;
 }
-function openModalCombined(title, rows){
-  modalTitle.textContent = title + " · Confirmed + Potential";
-  modalHead.innerHTML = "<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>";
+function openPopoverCombined(title, rows, x, y){
+  popTitle.textContent = title;
+  popHead.innerHTML = "<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>";
   if(rows&&rows.length){
-    modalBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('');
+    popBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('');
   } else {
-    modalBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
+    popBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
   }
-  backdrop.style.display='block';
-  positionModalNearClick();
+  pop.style.display='block';
+  placePopoverAt(x, y);
 }
-function closeModal(){ backdrop.style.display='none'; modal.style.display='none'; lastClickY=null; }
+
+// ------- WHAT-IF SCHEDULE IMPACT -------
+const impactSource = document.getElementById('impactSource');
+const impactProjectSel = document.getElementById('impactProject');
+const impactMult = document.getElementById('impactMult');
+const impactLead = document.getElementById('impactLead');
+const impactOT = document.getElementById('impactOT');
+const impactTarget = document.getElementById('impactTarget'); // currently unused but kept for future logic
+const impactInd = document.getElementById('impactInd');
+const impactDel = document.getElementById('impactDel');
+const impactRun = document.getElementById('impactRun');
+const impactResult = document.getElementById('impactResult');
+
+function fmtDateInput(d){
+  const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function addWorkdays(d, n){
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let left = Math.max(0, Math.floor(n));
+  while(left>0){
+    t.setDate(t.getDate()+1);
+    const dow=t.getDay(); if(dow>=1 && dow<=5) left--;
+  }
+  return t;
+}
+function maxDate(a,b){ return (a>b) ? a : b; }
+function minDate(a,b){ return (a<b) ? a : b; }
+
+function impactSourceProjects(){
+  const src = impactSource.value;
+  return (src==='potential') ? potentialProjects : projects;
+}
+function setImpactProjects(){
+  const arr = impactSourceProjects();
+  impactProjectSel.innerHTML = "";
+  arr.forEach((p, i)=>{
+    const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+    const opt = document.createElement('option');
+    opt.value = String(i); opt.textContent = label;
+    impactProjectSel.appendChild(opt);
+  });
+  if(arr.length){
+    const p = arr[0];
+    if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
+    if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
+  } else {
+    impactInd.value = ""; impactDel.value = "";
+  }
+}
+impactSource.addEventListener('change', setImpactProjects);
+impactProjectSel.addEventListener('change', ()=>{
+  const arr = impactSourceProjects();
+  const p = arr[Number(impactProjectSel.value)||0];
+  if(!p) return;
+  if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
+  if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
+});
+setImpactProjects();
+
+// Compute capacity per day for a department
+function capPerDay(key, overtimePct){
+  const dept = departmentCapacities.find(x=>x.key===key);
+  const perWeek = (dept?.headcount||0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
+  const uplift = 1 + Math.max(0, (parseFloat(overtimePct)||0))/100;
+  return (perWeek * uplift) / 5.0;
+}
+
+// Baseline arrays (confirmed only) for the current period
+function baselineSeries(period, key){
+  const mapC = (period==='weekly') ? dataWConfirmed : dataMConfirmed;
+  return (mapC[key]?.series || []).slice();
+}
+
+// Period index range covering [start..end]
+function periodRange(period, labels, start, end){
+  let s=-1, e=-1;
+  for(let i=0;i<labels.length;i++){
+    const L=parseDateLocalISO(labels[i]);
+    const Pstart = (period==='weekly') ? mondayOf(L) : firstOfMonth(L);
+    const Pend   = (period==='weekly') ? new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6) : lastOfMonth(L);
+    if(s===-1 && Pend>=start) s=i;
+    if(Pstart<=end) e=i;
+  }
+  if(s===-1 || e===-1 || e<s) return null;
+  return {s,e};
+}
+
+// Hours by period for the one selected project (uniform over workdays)
+function projectHoursSeries(period, key, proj, mult, labels){
+  const total = new Array(labels.length).fill(0);
+  const hrs = (proj[key]||0) * (mult||1);
+  if(hrs<=0) return total;
+
+  const a = parseDateLocalISO( (impactInd.value && impactInd.value.length>=10) ? impactInd.value : proj.induction );
+  const b = parseDateLocalISO( (impactDel.value && impactDel.value.length>=10) ? impactDel.value : proj.delivery  );
+  if(isNaN(a)||isNaN(b) || b<a) return total;
+
+  if(period==='weekly'){
+    const rng = periodRange('weekly', labels, a, b);
+    if(!rng) return total;
+    const n = rng.e - rng.s + 1; const per = hrs / n;
+    for(let i=rng.s;i<=rng.e;i++){ total[i]+=per; }
+  } else {
+    for(let i=0;i<labels.length;i++){
+      const mStart=parseDateLocalISO(labels[i]);
+      const mEnd=lastOfMonth(mStart);
+      const ovS = maxDate(mStart, a), ovE = minDate(mEnd, b);
+      if(ovE>=ovS){
+        const projWD = workdaysInclusive(a,b);
+        const monWD  = workdaysInclusive(ovS,ovE);
+        const share  = projWD>0 ? (monWD/projWD) : 0;
+        total[i] += hrs*share;
+      }
+    }
+  }
+  return total;
+}
+
+// Sum headroom (confirmed capacity minus confirmed load) in the window for a dept
+function sumHeadroom(period, key, start, end, overtimePct){
+  const labels = (period==='weekly') ? weekLabels : monthLabels;
+  const cap = capacityArray(key, labels, period);
+  const base = baselineSeries(period, key);
+  const uplift = 1 + Math.max(0,(parseFloat(overtimePct)||0))/100;
+  const rng = periodRange(period, labels, start, end);
+  if(!rng) return 0;
+  let sum = 0;
+  for(let i=rng.s;i<=rng.e;i++){
+    const hr = Math.max(0, cap[i]*uplift - (base[i]||0));
+    sum += hr;
+  }
+  return sum;
+}
+
+function renderImpactResult(obj){
+  const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
+  const dfmt = d=>fmtDateInput(d);
+  let html = `
+    <div><strong>Earliest allowable induction:</strong> ${dfmt(earliestStart)}</div>
+    <div><strong>Requested induction:</strong> ${dfmt(targetStart)}</div>
+    <div><strong>Requested delivery:</strong> ${dfmt(targetEnd)}</div>
+    <div><strong>New delivery (what-if):</strong> ${dfmt(newEnd)} <em>${slipDays>0?`(+${slipDays} workdays)`:''}</em></div>
+    <table class="impact-table">
+      <thead><tr><th>Department</th><th>Proj Hours</th><th>Headroom</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td>${r.name}</td>
+          <td>${r.h.toFixed(0)}</td>
+          <td>${r.head.toFixed(0)}</td>
+          <td style="color:${r.short>0?'#b91c1c':'#065f46'};">${r.short>0?(''+r.short.toFixed(0)):'0'}</td>
+          <td><strong>${r.slip}</strong></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+  impactResult.innerHTML = html;
+
+  // annotate on main chart
+  const startLbl = (currentPeriod==='weekly') ? ymd(mondayOf(earliestStart)) : ymd(firstOfMonth(earliestStart));
+  const endLbl   = (currentPeriod==='weekly') ? ymd(mondayOf(newEnd))       : ymd(firstOfMonth(newEnd));
+  chart.options.plugins.annotation.annotations.whatIfStart = {
+    type:'line', xMin:startLbl, xMax:startLbl, borderColor:'#2563eb', borderWidth:2,
+    label:{display:true, content:'What-If Start', position:'start', backgroundColor:'rgba(37,99,235,0.1)', color:'#2563eb'}
+  };
+  chart.options.plugins.annotation.annotations.whatIfEnd = {
+    type:'line', xMin:endLbl, xMax:endLbl, borderColor:'#7c3aed', borderWidth:2,
+    label:{display:true, content:'What-If End', position:'end', backgroundColor:'rgba(124,58,237,0.1)', color:'#7c3aed'}
+  };
+  chart.update();
+}
+
+impactRun.addEventListener('click', ()=>{
+  const arr = impactSourceProjects();
+  const idx = Number(impactProjectSel.value)||0;
+  const proj = arr[idx];
+  if(!proj){ impactResult.textContent = "No project selected."; return; }
+
+  const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
+  const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
+  const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
+
+  const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
+  const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
+
+  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){
+    impactResult.textContent = "Invalid induction/delivery dates."; return;
+  }
+
+  const today = new Date();
+  const leadReady = addWorkdays(today, minLead);
+  const earliestStart = maxDate(rawStart, leadReady);
+  const targetStart = rawStart;
+  const targetEnd   = rawEnd;
+
+  const rows = [];
+  let overallSlip = 0;
+
+  departmentCapacities.forEach(d=>{
+    const key = d.key;
+    const name = d.name;
+    const capDay = capPerDay(key, otPct);
+
+    const H = (proj[key]||0)*mult;
+
+    const head = sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct);
+
+    let short = Math.max(0, H - head);
+    let slip = (short>0 && capDay>0) ? Math.ceil(short / capDay) : 0;
+
+    overallSlip = Math.max(overallSlip, slip);
+    rows.push({name, h:H, head, short, slip});
+  });
+
+  const newEnd = addWorkdays(targetEnd, overallSlip);
+
+  renderImpactResult({
+    earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows
+  });
+});
 
 // initial render
 refreshDatasets();
@@ -754,7 +1034,7 @@ rebuildUtilChart();
 </html>
 """
 
-# Inject live data into the HTML
+# Inject live data
 html_code = (
     html_template
       .replace("__PROJECTS__", json.dumps(st.session_state.projects))
@@ -763,5 +1043,5 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-# Tall iframe, disable inner scrolling to avoid double scrollbars
-components.html(html_code, height=1550, scrolling=False)
+# Make the iframe tall and disable its own scrolling to avoid double scrollbars
+components.html(html_code, height=1700, scrolling=False)
