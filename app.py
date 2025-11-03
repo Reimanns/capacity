@@ -185,6 +185,14 @@ html_template = """
 
     details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
     details.impact summary{ cursor:pointer; font-weight:600; }
+
+    .hidden{ display:none !important; }
+
+    /* Manual section */
+    details.manual { border:1px dashed #e5e7eb; border-radius:10px; padding:8px 12px; background:#fcfcfc; margin:8px 0; }
+    details.manual summary{ cursor:pointer; font-weight:600; }
+    .hours-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:8px; margin-top:8px; }
+    .hours-grid label{ font-size:12px; display:flex; flex-direction:column; gap:4px; }
   </style>
 </head>
 <body>
@@ -224,18 +232,21 @@ html_template = """
 </div>
 
 <!-- What-If Schedule Impact -->
-<details class="impact">
+<details class="impact" open>
   <summary>What-If Schedule Impact</summary>
   <div class="impact-grid">
     <label>Source dataset
       <select id="impactSource">
-        <option value="potential" selected>Potential</option>
+        <option value="manual" selected>Manual</option>
+        <option value="potential">Potential</option>
         <option value="confirmed">Confirmed</option>
       </select>
     </label>
-    <label>Project
+
+    <label id="impactProjectWrap">Project
       <select id="impactProject"></select>
     </label>
+
     <label>Scope multiplier
       <input id="impactMult" type="number" step="0.05" value="1.00">
     </label>
@@ -257,7 +268,29 @@ html_template = """
     </label>
 
     <button id="impactRun">Calculate Impact</button>
+    <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
   </div>
+
+  <!-- MANUAL inputs (collapsible; shown only if Manual selected) -->
+  <details class="manual" id="manualPanel" open>
+    <summary>Manual project hours & meta</summary>
+    <div class="impact-grid" style="grid-template-columns: repeat(4, minmax(140px,1fr));">
+      <label>Customer
+        <input id="manCustomer" type="text" placeholder="(optional)">
+      </label>
+      <label>Project number
+        <input id="manNumber" type="text" placeholder="(optional)">
+      </label>
+      <label>Aircraft model
+        <input id="manAircraft" type="text" placeholder="(optional)">
+      </label>
+      <label>Scope
+        <input id="manScope" type="text" placeholder="(optional)">
+      </label>
+    </div>
+    <div class="hours-grid" id="manualHours"></div>
+  </details>
+
   <div id="impactResult" class="impact-box"></div>
 </details>
 
@@ -314,6 +347,17 @@ function workdaysInMonth(d){
   const mEnd   = lastOfMonth(d);
   return workdaysInclusive(mStart, mEnd);
 }
+function addWorkdays(d, n){
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let left = Math.max(0, Math.floor(n));
+  while(left>0){
+    t.setDate(t.getDate()+1);
+    const dow=t.getDay(); if(dow>=1 && dow<=5) left--;
+  }
+  return t;
+}
+function maxDate(a,b){ return (a>b) ? a : b; }
+function minDate(a,b){ return (a<b) ? a : b; }
 
 // -------------------- LABELS --------------------
 function getWeekList(){
@@ -533,7 +577,8 @@ let chart = new Chart(ctx,{
     scales:{
       x:{ title:{display:true, text:'Week Starting'} },
       y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
-      y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 }
+      y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150,
+           ticks:{ callback:(v)=> v + '%' } }
     },
     plugins:{
       annotation: annos,
@@ -608,12 +653,8 @@ function createUtilChart(){
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { title: { display: true, text: currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting' } },
-        y: {
-          title: { display: true, text: 'Utilization %' },
-          beginAtZero: true,
-          suggestedMax: 160,
-          ticks: { callback: (val) => `${val}%` }
-        }
+        y: { title: { display: true, text: 'Utilization %' }, beginAtZero: true, suggestedMax: 160,
+             ticks: { callback: (val) => `${val}%` } }
       },
       plugins: {
         legend: { display: false },
@@ -627,18 +668,12 @@ function createUtilChart(){
                        backgroundColor: 'rgba(255,255,255,0.8)' }
             },
             target100: {
-              type: 'line',
-              yMin: 100, yMax: 100,
+              type: 'line', yMin: 100, yMax: 100,
               borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-              borderWidth: 2,
-              borderDash: [6,3],
-              label: {
-                display: true,
-                content: '100% target',
-                position: 'end',
-                backgroundColor: 'rgba(255,255,255,0.9)',
-                color: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-              }
+              borderWidth: 2, borderDash: [6,3],
+              label: { display: true, content: '100% target', position: 'end',
+                       backgroundColor: 'rgba(255,255,255,0.9)',
+                       color: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim() }
             }
           }
         }
@@ -646,7 +681,6 @@ function createUtilChart(){
     }
   });
 }
-
 function rebuildUtilChart(){
   const wrap = document.querySelector('.chart-wrap.util');
   if (utilSeparate) {
@@ -757,12 +791,11 @@ const popHead = document.getElementById('popHead');
 const popBody = document.getElementById('popBody');
 document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
 
-function clamp(val, min, max){ return Math.max(min, Math.min(max, val)); }
 function placePopoverAt(x, y){
   const rect = pop.getBoundingClientRect();
   const pad = 12;
   const vw = window.innerWidth; const vh = window.innerHeight;
-  let left = x + 14; // offset a bit to the right of cursor
+  let left = x + 14;
   let top  = y - 10;
   if (left + rect.width + pad > vw) left = vw - rect.width - pad;
   if (top + rect.height + pad > vh) top = vh - rect.height - pad;
@@ -771,7 +804,6 @@ function placePopoverAt(x, y){
   pop.style.left = left + "px";
   pop.style.top  = top  + "px";
 }
-
 function openPopoverSingle(title, rows, x, y){
   popTitle.textContent = title;
   popHead.innerHTML = "<tr><th>Customer</th><th>Hours</th></tr>";
@@ -806,39 +838,52 @@ function openPopoverCombined(title, rows, x, y){
   placePopoverAt(x, y);
 }
 
-// ------- WHAT-IF SCHEDULE IMPACT -------
+// ------- WHAT-IF SCHEDULE IMPACT (Manual + Clear) -------
 const impactSource = document.getElementById('impactSource');
+const impactProjectWrap = document.getElementById('impactProjectWrap');
 const impactProjectSel = document.getElementById('impactProject');
 const impactMult = document.getElementById('impactMult');
 const impactLead = document.getElementById('impactLead');
 const impactOT = document.getElementById('impactOT');
-const impactTarget = document.getElementById('impactTarget'); // currently unused but kept for future logic
+const impactTarget = document.getElementById('impactTarget'); // reserved
 const impactInd = document.getElementById('impactInd');
 const impactDel = document.getElementById('impactDel');
 const impactRun = document.getElementById('impactRun');
+const impactClear = document.getElementById('impactClear');
 const impactResult = document.getElementById('impactResult');
 
-function fmtDateInput(d){
-  const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${da}`;
+const manualPanel = document.getElementById('manualPanel');
+const manualHoursDiv = document.getElementById('manualHours');
+const manCustomer = document.getElementById('manCustomer');
+const manNumber = document.getElementById('manNumber');
+const manAircraft = document.getElementById('manAircraft');
+const manScope = document.getElementById('manScope');
+
+function buildManualHoursInputs(){
+  manualHoursDiv.innerHTML = "";
+  departmentCapacities.forEach(d=>{
+    const lab = document.createElement('label');
+    lab.innerHTML = `${d.name}<input id="manH_${d.key}" type="number" min="0" step="1" value="0">`;
+    manualHoursDiv.appendChild(lab);
+  });
 }
-function addWorkdays(d, n){
-  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  let left = Math.max(0, Math.floor(n));
-  while(left>0){
-    t.setDate(t.getDate()+1);
-    const dow=t.getDay(); if(dow>=1 && dow<=5) left--;
-  }
-  return t;
-}
-function maxDate(a,b){ return (a>b) ? a : b; }
-function minDate(a,b){ return (a<b) ? a : b; }
+buildManualHoursInputs();
 
 function impactSourceProjects(){
   const src = impactSource.value;
   return (src==='potential') ? potentialProjects : projects;
 }
 function setImpactProjects(){
+  const src = impactSource.value;
+  const isManual = (src === 'manual');
+  // Toggle UI
+  impactProjectWrap.classList.toggle('hidden', isManual);
+  manualPanel.style.display = isManual ? 'block' : 'none';
+
+  if (isManual){
+    // leave induction/delivery untouched; user will set them
+    return;
+  }
   const arr = impactSourceProjects();
   impactProjectSel.innerHTML = "";
   arr.forEach((p, i)=>{
@@ -899,8 +944,8 @@ function projectHoursSeries(period, key, proj, mult, labels){
   const hrs = (proj[key]||0) * (mult||1);
   if(hrs<=0) return total;
 
-  const a = parseDateLocalISO( (impactInd.value && impactInd.value.length>=10) ? impactInd.value : proj.induction );
-  const b = parseDateLocalISO( (impactDel.value && impactDel.value.length>=10) ? impactDel.value : proj.delivery  );
+  const a = parseDateLocalISO( impactInd.value && impactInd.value.length>=10 ? impactInd.value : proj.induction );
+  const b = parseDateLocalISO( impactDel.value && impactDel.value.length>=10 ? impactDel.value : proj.delivery  );
   if(isNaN(a)||isNaN(b) || b<a) return total;
 
   if(period==='weekly'){
@@ -942,7 +987,7 @@ function sumHeadroom(period, key, start, end, overtimePct){
 
 function renderImpactResult(obj){
   const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
-  const dfmt = d=>fmtDateInput(d);
+  const dfmt = d=>ymd(d);
   let html = `
     <div><strong>Earliest allowable induction:</strong> ${dfmt(earliestStart)}</div>
     <div><strong>Requested induction:</strong> ${dfmt(targetStart)}</div>
@@ -978,14 +1023,31 @@ function renderImpactResult(obj){
 }
 
 impactRun.addEventListener('click', ()=>{
-  const arr = impactSourceProjects();
-  const idx = Number(impactProjectSel.value)||0;
-  const proj = arr[idx];
-  if(!proj){ impactResult.textContent = "No project selected."; return; }
-
+  const src = impactSource.value;
   const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
   const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
   const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
+
+  // Build the project under test
+  let proj = null;
+  if (src === 'manual'){
+    // require dates
+    const indVal = impactInd.value;
+    const delVal = impactDel.value;
+    if(!indVal || !delVal){ impactResult.textContent = "Please set induction and delivery for Manual."; return; }
+    proj = { induction: indVal, delivery: delVal };
+    // attach hours from manual grid
+    departmentCapacities.forEach(d=>{
+      const el = document.getElementById('manH_'+d.key);
+      const v = parseFloat(el?.value || '0') || 0;
+      proj[d.key] = v;
+    });
+  } else {
+    const arr = impactSourceProjects();
+    const idx = Number(impactProjectSel.value)||0;
+    proj = arr[idx];
+    if(!proj){ impactResult.textContent = "No project selected."; return; }
+  }
 
   const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
   const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
@@ -1007,13 +1069,10 @@ impactRun.addEventListener('click', ()=>{
     const key = d.key;
     const name = d.name;
     const capDay = capPerDay(key, otPct);
-
     const H = (proj[key]||0)*mult;
-
     const head = sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct);
-
-    let short = Math.max(0, H - head);
-    let slip = (short>0 && capDay>0) ? Math.ceil(short / capDay) : 0;
+    const short = Math.max(0, H - head);
+    const slip = (short>0 && capDay>0) ? Math.ceil(short / capDay) : 0;
 
     overallSlip = Math.max(overallSlip, slip);
     rows.push({name, h:H, head, short, slip});
@@ -1026,7 +1085,17 @@ impactRun.addEventListener('click', ()=>{
   });
 });
 
-// initial render
+// ---- Clear What-If
+impactClear.addEventListener('click', ()=>{
+  impactResult.innerHTML = "";
+  if (chart?.options?.plugins?.annotation?.annotations){
+    delete chart.options.plugins.annotation.annotations.whatIfStart;
+    delete chart.options.plugins.annotation.annotations.whatIfEnd;
+    chart.update();
+  }
+});
+
+// ---------- Initialize ----------
 refreshDatasets();
 rebuildUtilChart();
 </script>
@@ -1044,4 +1113,4 @@ html_code = (
 )
 
 # Make the iframe tall and disable its own scrolling to avoid double scrollbars
-components.html(html_code, height=1700, scrolling=False)
+components.html(html_code, height=1750, scrolling=False)
