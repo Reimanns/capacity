@@ -147,21 +147,23 @@ html_template = """
       --actual:#ef6c00; --actual-20: rgba(239,108,0,0.2);
       --muted:#6b7280;
       --whatif:#6f42c1; --whatif-20: rgba(111,66,193,0.18);
+      --good:#065f46; --warn:#92400e; --bad:#7f1d1d;
+      --card:#ffffff; --card-border:#e5e7eb;
     }
     body { font-family: Arial, sans-serif; margin: 8px 20px 24px; }
     h1 { text-align:center; margin: 6px 0 4px; }
     .controls { display:flex; gap:16px; flex-wrap:wrap; align-items:center; justify-content:center; margin: 8px auto 10px; }
     .controls label { font-size:14px; display:flex; align-items:center; gap:6px; }
     .metric-bar { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin: 8px 0 14px; }
-    .metric { border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; min-width:220px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background:#fff; }
+    .metric { border:1px solid var(--card-border); border-radius:10px; padding:10px 14px; min-width:220px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background:var(--card); }
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
     .metric .value { font-weight:700; font-size:18px; }
     .chart-wrap { width:100%; height:680px; margin-bottom: 8px; position:relative; }
-    .chart-wrap.util { height:380px; margin-top: 10px; } 
+    .chart-wrap.util { height:380px; margin-top: 10px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
-    /* What-If panel */
-    .whatif { border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; margin: 12px auto 10px; max-width:1200px; background:#fafafa; }
+    /* What-If panel (moved ABOVE charts) */
+    .whatif { border:1px solid var(--card-border); border-radius:12px; padding:12px 14px; margin: 10px auto 12px; max-width:1200px; background:#fafafa; }
     .whatif h2 { font-size:18px; margin: 0 0 8px; }
     .wi-row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:6px 0; }
     .wi-hours { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:8px; margin-top:6px; }
@@ -169,10 +171,21 @@ html_template = """
     .wi-actions { display:flex; gap:10px; align-items:center; margin-top:8px; }
     .wi-actions button { border:1px solid #ddd; background:#fff; padding:6px 10px; border-radius:8px; cursor:pointer; }
     .wi-actions button:hover { background:#f4f4f5; }
-    .wi-results { margin-top:8px; overflow:auto; }
+    .wi-badge { padding:2px 6px; border-radius:8px; font-size:12px; background:#eef2ff; color:#3730a3; }
+
+    /* What-If summary cards */
+    .wi-summary { display:grid; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); gap:10px; margin-top:10px; }
+    .card { border:1px solid var(--card-border); border-radius:10px; background:var(--card); padding:10px 12px; }
+    .card .title { font-size:12px; color:var(--muted); margin-bottom:4px; }
+    .card .big { font-weight:700; font-size:18px; }
+    .ok { color:var(--good); }
+    .warn { color:var(--warn); }
+    .bad { color:var(--bad); }
+
+    /* What-If results table */
+    .wi-results { margin-top:10px; overflow:auto; }
     .wi-table { border-collapse:collapse; width:100%; }
     .wi-table th, .wi-table td { border-bottom:1px solid #eee; padding:6px 8px; font-size:13px; text-align:left; }
-    .wi-badge { padding:2px 6px; border-radius:8px; font-size:12px; background:#eef2ff; color:#3730a3; }
 
     /* Click-anchored popover */
     .popover {
@@ -222,12 +235,7 @@ html_template = """
   <div class="metric"><div class="label">Capacity</div><div class="value" id="weeklyCap">—</div></div>
 </div>
 
-<div class="chart-wrap" id="mainChartWrap"><canvas id="myChart"></canvas></div>
-<div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
-
-<p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popover includes both Confirmed and Potential for that period. Click elsewhere to dismiss.</p>
-
-<!-- WHAT-IF SCHEDULE IMPACT -->
+<!-- WHAT-IF SCHEDULE IMPACT (ABOVE CHARTS) -->
 <div class="whatif">
   <h2>What-If Schedule Impact <span class="wi-badge" id="wiStatus">idle</span></h2>
   <div class="wi-row">
@@ -258,14 +266,23 @@ html_template = """
   <div class="wi-row">
     <label>Induction: <input type="date" id="wiInd"></label>
     <label>Delivery:  <input type="date" id="wiDel"></label>
+    <label>Min Lead Time (workdays): <input type="number" id="wiMLT" value="10" min="0" step="1" style="width:80px;"></label>
   </div>
   <div class="wi-hours" id="wiHours"></div>
   <div class="wi-actions">
     <button id="wiRun">Run What-If</button>
     <button id="wiClear">Clear What-If</button>
   </div>
+
+  <!-- Summary cards + table populate here -->
+  <div class="wi-summary" id="wiSummary"></div>
   <div class="wi-results" id="wiResults"></div>
 </div>
+
+<div class="chart-wrap" id="mainChartWrap"><canvas id="myChart"></canvas></div>
+<div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
+
+<p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popover includes both Confirmed and Potential for that period. Click elsewhere to dismiss.</p>
 
 <!-- Click-anchored popover -->
 <div id="popover" class="popover" style="display:none;">
@@ -311,6 +328,15 @@ function workdaysInMonth(d){
   const mStart = firstOfMonth(d);
   const mEnd   = lastOfMonth(d);
   return workdaysInclusive(mStart, mEnd);
+}
+function addWorkdays(d, n){
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let left = n;
+  while(left>0){
+    t.setDate(t.getDate()+1);
+    if(isWorkday(t)) left--;
+  }
+  return t;
 }
 
 // -------------------- LABELS --------------------
@@ -564,7 +590,6 @@ let chart = new Chart(ctx,{
       const mapP = dataMap('p')[currentKey]?.breakdown || [];
       const mapA = dataMap('a')[currentKey]?.breakdown || [];
 
-      // prepare content
       let header = '';
       let headHTML = "<tr><th>Customer</th><th>Hours</th></tr>";
       let bodyHTML = '';
@@ -591,14 +616,11 @@ let chart = new Chart(ctx,{
         header = `${labels[idx]} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`;
         bodyHTML = ba.length ? ba.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join('') : `<tr><td colspan="2">No data</td></tr>`;
       } else if (wiOverlayActive && chart.data.datasets[datasetIndex]._isWI) {
-        // what-if overlay point clicked
         header = `${labels[idx]} · What-If (${name})`;
         headHTML = "<tr><th>Source</th><th>Hours</th></tr>";
         const val = chart.data.datasets[datasetIndex].data[idx] || 0;
         bodyHTML = `<tr><td>Scenario</td><td>${val.toFixed(1)}</td></tr>`;
-      } else {
-        return;
-      }
+      } else { return; }
 
       // position near click
       const canvasRect = evt.chart.canvas.getBoundingClientRect();
@@ -728,8 +750,7 @@ function refreshDatasets(){
   chart.data.datasets[2].hidden = !showPotential;
   chart.data.datasets[3].hidden = !showActual;
 
-  // rebuild what-if overlay if active
-  ensureWhatIfDatasets(false); // just rewire datasets if overlay is on
+  ensureWhatIfDatasets(false); // rewire what-if overlay if needed
 
   chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential, wiOverlayActive ? wiOverlaySeries : null, wiCapOTmult);
 
@@ -812,14 +833,13 @@ function mergeConfirmedPotential(bc, bp){
   return rows;
 }
 
-// -------------------- CLICK-ANCHored POPOVER --------------------
+// -------------------- CLICK-ANCHORED POPOVER --------------------
 const pop = document.getElementById('popover');
 const popTitle = document.getElementById('popTitle');
 const popHead  = document.getElementById('popHead');
 const popBody  = document.getElementById('popBody');
 document.getElementById('popClose').addEventListener('click', closePopover);
 document.addEventListener('click', (e)=>{
-  // close when clicking outside popover and canvas click handler not triggered
   if (pop.style.display==='block'){
     const wrap = document.getElementById('mainChartWrap');
     if (!pop.contains(e.target) && !wrap.contains(e.target)) closePopover();
@@ -829,11 +849,8 @@ function openPopoverAt(px, py, title, headHTML, bodyHTML){
   popTitle.textContent = title;
   popHead.innerHTML = headHTML;
   popBody.innerHTML = bodyHTML;
-
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
-
-  // position and keep in viewport
   pop.style.display='block';
   pop.style.left = Math.min(px+12, vw-20- pop.offsetWidth) + 'px';
   pop.style.top  = Math.min(py- pop.offsetHeight/2, vh-20- pop.offsetHeight) + 'px';
@@ -850,9 +867,11 @@ const wiOverlay = document.getElementById('wiOverlay');
 const wiHours = document.getElementById('wiHours');
 const wiInd = document.getElementById('wiInd');
 const wiDel = document.getElementById('wiDel');
+const wiMLT = document.getElementById('wiMLT');
 const wiRun = document.getElementById('wiRun');
 const wiClear = document.getElementById('wiClear');
 const wiResults = document.getElementById('wiResults');
+const wiSummary = document.getElementById('wiSummary');
 const wiStatus = document.getElementById('wiStatus');
 
 function populateSeed(){
@@ -922,12 +941,10 @@ function capacityArrayOT(key, labels, period, otPct){
   const mult = 1 + (parseFloat(otPct||0)/100);
   return base.map(v=> v*mult);
 }
-// distribute scenario hours across periods in window by workdays overlap
 function distributeScenario(period, startISO, endISO, totalHours){
   const labels = labelsFor(period);
   const start = parseDateLocalISO(startISO); const end = parseDateLocalISO(endISO);
   const parts = new Array(labels.length).fill(0);
-  // count total workdays over the whole window
   const totalWD = Math.max(1, workdaysInclusive(start, end));
   for (let i=0;i<labels.length;i++){
     let a,b;
@@ -946,41 +963,62 @@ function distributeScenario(period, startISO, endISO, totalHours){
   }
   return parts;
 }
-
 function ensureWhatIfDatasets(clear=false){
-  // remove existing WI datasets
   const keep = chart.data.datasets.filter(ds=> !(ds._isWI || ds._isWIcap));
   chart.data.datasets = keep;
 
-  if (!wiOverlayActive || clear) return;
+  if (!wiOverlayActive || clear) { chart.update(); return; }
 
-  // add WI overlay for currentKey (line + optional OT capacity)
   chart.data.datasets.push({
     label: 'What-If Load (hrs)',
     data: wiOverlaySeries || new Array(currentLabels().length).fill(0),
     borderColor: getComputedStyle(document.documentElement).getPropertyValue('--whatif').trim(),
     backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--whatif-20').trim(),
-    borderWidth: 2,
-    fill: true,
-    pointRadius: 0,
-    tension: (currentPeriod==='monthly') ? 0 : 0.1,
-    _isWI: true
+    borderWidth: 2, fill: true, pointRadius: 0,
+    tension: (currentPeriod==='monthly') ? 0 : 0.1, _isWI: true
   });
   chart.data.datasets.push({
     label: 'Capacity (hrs) with OT',
     data: capacityArray(currentKey, currentLabels(), currentPeriod).map(v => v * wiCapOTmult),
     borderColor: getComputedStyle(document.documentElement).getPropertyValue('--whatif').trim(),
     backgroundColor: 'transparent',
-    borderDash: [6,3],
-    borderWidth: 2,
-    fill: false,
-    pointRadius: 0,
-    tension: (currentPeriod==='monthly') ? 0 : 0.1,
-    _isWIcap: true
+    borderDash: [6,3], borderWidth: 2, fill: false, pointRadius: 0,
+    tension: (currentPeriod==='monthly') ? 0 : 0.1, _isWIcap: true
   });
   chart.update();
 }
 
+// ---- Build summary cards HTML
+function renderSummaryCards(indISO, delISO, mltWD, totalHeadroom, totalNeed, maxSlipWD){
+  const today = new Date();
+  const allowedStart = addWorkdays(today, parseInt(mltWD||0,10));
+  const ind = parseDateLocalISO(indISO);
+  const del = parseDateLocalISO(delISO);
+  const mltOK = (ind >= allowedStart);
+  const newDelivery = addWorkdays(del, maxSlipWD);
+
+  const cards = `
+    <div class="card">
+      <div class="title">Min Lead Time earliest start</div>
+      <div class="big">${ymd(allowedStart)}</div>
+      <div class="${mltOK?'ok':'bad'}">${mltOK?'Meets MLT':'Violates MLT'}</div>
+    </div>
+    <div class="card">
+      <div class="title">Scenario Hours vs Headroom</div>
+      <div class="big">${totalNeed.toFixed(1)} hrs</div>
+      <div class="${(totalNeed<=totalHeadroom)?'ok':'warn'}">Headroom: ${totalHeadroom.toFixed(1)} hrs</div>
+    </div>
+    <div class="card">
+      <div class="title">Projected Slip</div>
+      <div class="big ${maxSlipWD>0?'warn':'ok'}">${maxSlipWD} workday(s)</div>
+      <div class="title">New Delivery</div>
+      <div>${ymd(newDelivery)}</div>
+    </div>
+  `;
+  document.getElementById('wiSummary').innerHTML = cards;
+}
+
+// ---- What-If Run / Clear
 wiRun.addEventListener('click', ()=>{
   wiStatus.textContent = "running...";
   const period = (wiPeriod.value==='useChart') ? currentPeriod : wiPeriod.value;
@@ -990,20 +1028,21 @@ wiRun.addEventListener('click', ()=>{
   const scopeMult = parseFloat(wiScope.value||1.0);
 
   const ind = wiInd.value; const del = wiDel.value;
+  const mlt = parseInt(wiMLT.value||"0",10);
   if (!ind || !del){ wiResults.innerHTML = "<em>Please set induction and delivery dates.</em>"; wiStatus.textContent="needs dates"; return; }
 
-  // per-department scenario totals (apply scope)
   const depTotals = {};
   departmentCapacities.forEach(d=>{
     depTotals[d.key] = scopeMult * parseFloat(document.getElementById('wiH_'+d.key).value || "0");
   });
 
-  // compute headroom/shortfall/slip per department
   let rowsHTML = '<table class="wi-table"><thead><tr><th>Department</th><th>Headroom (hrs)</th><th>Shortfall (hrs)</th><th>Slip (wd)</th></tr></thead><tbody>';
-  let maxSlip = 0;
+  let maxSlip = 0, totalHeadroom = 0, totalNeed = 0, totalShort = 0;
+
   departmentCapacities.forEach(d=>{
     const base = baselineSeries(period, d.key, wiBaseline.value);
     const cap  = capacityArrayOT(d.key, labels, period, otPct);
+
     // window indices
     let s=-1,e=-1;
     for(let i=0;i<labels.length;i++){
@@ -1023,20 +1062,20 @@ wiRun.addEventListener('click', ()=>{
     const need = depTotals[d.key] || 0;
     const shortfall = Math.max(0, need - headroom);
 
-    // daily capacity with OT
     const capPerWeek = (d.headcount||0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR * (1 + (otPct/100));
     const capPerDay = capPerWeek / 5.0;
     const slip = shortfall>0 ? Math.ceil(shortfall / Math.max(1,capPerDay)) : 0;
+
+    totalHeadroom += headroom; totalNeed += need; totalShort += shortfall;
     maxSlip = Math.max(maxSlip, slip);
 
     rowsHTML += `<tr><td>${d.name}</td><td>${headroom.toFixed(1)}</td><td>${shortfall.toFixed(1)}</td><td>${slip}</td></tr>`;
   });
   rowsHTML += '</tbody></table>';
-  const slipMsg = maxSlip>0 ? `<strong>Projected slip:</strong> ${maxSlip} workday(s)` : `<strong>No slip</strong> (fits within headroom)`;
-  wiResults.innerHTML = rowsHTML + `<div style="margin-top:6px;">${slipMsg}</div>`;
+  wiResults.innerHTML = rowsHTML;
+  renderSummaryCards(ind, del, mlt, totalHeadroom, totalNeed, maxSlip);
   wiStatus.textContent = "ready";
 
-  // overlay only for currentKey department
   if (wiOverlay.checked){
     const totalForDept = depTotals[currentKey] || 0;
     wiOverlaySeries = distributeScenario(period, ind, del, totalForDept);
@@ -1044,7 +1083,6 @@ wiRun.addEventListener('click', ()=>{
     ensureWhatIfDatasets(); // add overlay datasets
     refreshDatasets();      // refresh KPIs/util with overlay
   } else {
-    // run calc without overlay
     wiOverlayActive = false;
     wiOverlaySeries = null;
     ensureWhatIfDatasets(true);
@@ -1055,6 +1093,7 @@ wiRun.addEventListener('click', ()=>{
 wiClear.addEventListener('click', ()=>{
   wiStatus.textContent = "idle";
   wiResults.innerHTML = "";
+  wiSummary.innerHTML = "";
   wiOverlayActive = false;
   wiOverlaySeries = null;
   wiCapOTmult = 1.0;
@@ -1065,6 +1104,8 @@ wiClear.addEventListener('click', ()=>{
 // initial render
 refreshDatasets();
 rebuildUtilChart();
+populateSeed();
+buildWIHoursInputs();
 </script>
 </body>
 </html>
@@ -1080,4 +1121,4 @@ html_code = (
 )
 
 # Make the iframe tall and disable its own scrolling to avoid double scrollbars
-components.html(html_code, height=1600, scrolling=False)
+components.html(html_code, height=1750, scrolling=False)
