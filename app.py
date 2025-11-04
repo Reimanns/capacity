@@ -782,19 +782,8 @@ function refreshDatasets(){
   chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
   chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
 
-  // pick a visible x value to place the Today line
-    const target = (currentPeriod==='monthly') ? monthTodayLabel : weekTodayLabel;
-    const lbls = currentLabels();
-
-    // if exact match exists, use it; otherwise use the nearest future label, else the last label
-    function parseISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
-    let xVal = lbls.includes(target)
-      ? target
-      : (lbls.find(l => parseISO(l) >= parseISO(target)) || lbls[lbls.length-1]);
-
-    chart.options.plugins.annotation.annotations.todayLine.xMin = xVal;
-    chart.options.plugins.annotation.annotations.todayLine.xMax = xVal;
-
+  chart.options.plugins.annotation.annotations.todayLine.xMin = monthly ? monthTodayLabel : weekTodayLabel;
+  chart.options.plugins.annotation.annotations.todayLine.xMax = monthly ? monthTodayLabel : weekTodayLabel;
 
   chart.update();
   updateKPIs();
