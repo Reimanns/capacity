@@ -365,7 +365,7 @@ html_template = """
 
 <!-- Snapshot Breakdown (Sankey, Treemap, Pareto) -->
 <details class="snapshot" open>
-  <summary>Snapshot Breakdown (Projects → Dept) &nbsp;—&nbsp; Compare alternatives</summary>
+  <summary>Snapshot Breakdown (Projects → Dept)</summary>
   <div class="snap-controls">
     <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
     <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
