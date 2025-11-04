@@ -194,6 +194,24 @@ html_template = """
     .manual-box{ display:none; border:1px dashed #d1d5db; border-radius:10px; padding:10px; background:#fff; }
     .manual-grid{ display:grid; gap:8px; grid-template-columns: repeat(4, minmax(120px,1fr)); }
     .manual-grid label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
+    /* Sand legend + chips */
+    #sandLegend { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 2px; }
+    .legend-chip {
+      display:flex; align-items:center; gap:8px; padding:6px 10px;
+      border:1px solid #e5e7eb; border-radius:999px; font-size:12px; cursor:pointer;
+      background:#fff;
+    }
+    .legend-swatch { width:12px; height:12px; border-radius:3px; border:1px solid rgba(0,0,0,0.1); }
+    .legend-chip.dim { opacity:0.35; }
+    .legend-chip .pct { color:#6b7280; }
+
+    /* Right-edge label backdrop */
+    .label-outline {
+      paint-order: stroke fill;
+      stroke: #fff; stroke-width: 6px;
+    }
+
+    
   </style>
 </head>
 <body>
@@ -297,7 +315,15 @@ html_template = """
 
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
 <div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
+<div class="controls" id="sandControls" style="margin-top:6px;">
+  <label><strong>Project focus:</strong>
+    <select id="sandFocus"></select>
+  </label>
+  <label><input type="checkbox" id="sandLabels" checked> Show right-edge labels</label>
+</div>
+<div id="sandLegend"></div>
 <div class="chart-wrap sand"><canvas id="sandChart"></canvas></div>
+
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
@@ -702,14 +728,24 @@ function rebuildUtilChart(){
   chart.update();
 }
 
-// -------------------- SAND CHART (stacked per-project) --------------------
+// ---------- SAND CHART (stacked per-project) with stable colors, focus, labels, legend ----------
 let sandChart = null;
-function sumArrays(a,b){ const n=Math.max(a.length,b.length), out=new Array(n).fill(0);
-  for(let i=0;i<n;i++){ out[i]=(a[i]||0)+(b[i]||0); } return out; }
-function colorFromIndex(i, alpha=1){
-  const hue = (i*47) % 360;
-  return `hsla(${hue}, 65%, 55%, ${alpha})`;
+let sandFocusLabel = "";   // currently focused project (highlighted)
+const sandFocusSel = document.getElementById('sandFocus');
+const sandLabelsChk = document.getElementById('sandLabels');
+const sandLegendDiv = document.getElementById('sandLegend');
+
+// Stable color per project label
+function strHash(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function colorFor(label, alpha=1){
+  const h = strHash(label);
+  const hue = (h % 360);
+  return `hsla(${hue}, 65%, 52%, ${alpha})`;
 }
+function truncate(s, n){ return (s.length<=n) ? s : (s.slice(0, n-1) + '…'); }
+function sumArrays(a,b){ const n=Math.max(a.length,b.length), out=new Array(n).fill(0); for(let i=0;i<n;i++) out[i]=(a[i]||0)+(b[i]||0); return out; }
+
+// Per-project series
 function perProjectWeekly(arr, key, labels){
   const out = [];
   for(const p of arr){
@@ -725,7 +761,7 @@ function perProjectWeekly(arr, key, labels){
     }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let i=s;i<=e;i++){ data[i]+=per; }
+      for(let i=s;i<=e;i++) data[i]+=per;
       const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
       out.push({ label, data, total: hrs });
     }
@@ -769,22 +805,108 @@ function mergeProjectLists(A, B){
   });
   return Array.from(map.values());
 }
+
+// Right-edge labels plugin (avoids the legend hunt)
+const rightEdgeLabels = {
+  id: 'rightEdgeLabels',
+  afterDatasetsDraw(chart, args, opts){
+    if(!opts?.enabled) return;
+    const { ctx, data, chartArea, scales } = chart;
+    const yAxis = scales[chart.getDatasetMeta(0).yAxisID || 'y'];
+    const xAxis = scales[chart.getDatasetMeta(0).xAxisID || 'x'];
+    const rightX = chartArea.right - 6;
+
+    // Collect visible non-capacity datasets
+    const dsList = data.datasets
+      .map((ds, i) => ({ ds, meta: chart.getDatasetMeta(i), i }))
+      .filter(x => !x.meta.hidden && !x.ds.isCapacity);
+
+    // Only top N by last value get labels (reduce clutter)
+    const lastVals = dsList.map(x=>{
+      // find last nonzero value index
+      let j = x.ds.data.length-1;
+      while(j>=0 && (!x.ds.data[j] || x.ds.data[j]===0)) j--;
+      const v = (j>=0) ? x.ds.data[j] : 0;
+      return { ...x, j, v };
+    }).sort((a,b)=> b.v - a.v).slice(0, opts.maxLabels || 10);
+
+    const placed = [];
+    ctx.save();
+    ctx.font = `${opts.fontSize||12}px Arial`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    for(const item of lastVals){
+      const { ds, j } = item;
+      if(j<0) continue;
+      const y = yAxis.getPixelForValue(ds.data[j]);
+      let yy = y;
+      // simple collision avoidance
+      for(const py of placed){
+        if(Math.abs(yy - py) < 14) yy = py + 14;
+      }
+      placed.push(yy);
+
+      const label = truncate(ds._short || ds.label, opts.truncate || 18);
+      // outline for readability
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4;
+      ctx.strokeText(label, rightX, yy);
+      ctx.fillStyle = ds.borderColor || '#111';
+      ctx.fillText(label, rightX, yy);
+    }
+    ctx.restore();
+  }
+};
+Chart.register(rightEdgeLabels);
+
+// Build clickable legend chips
+function buildSandLegend(topList, chartRef){
+  sandLegendDiv.innerHTML = "";
+  topList.forEach((p, idx)=>{
+    const chip = document.createElement('div');
+    chip.className = 'legend-chip';
+    const sw = document.createElement('div');
+    sw.className = 'legend-swatch';
+    sw.style.background = colorFor(p.label, 1);
+    const name = document.createElement('span');
+    name.textContent = truncate(p.label, 28);
+    const pct = document.createElement('span');
+    pct.className = 'pct';
+    pct.textContent = `(${(p.pct*100).toFixed(0)}%)`;
+    chip.appendChild(sw); chip.appendChild(name); chip.appendChild(pct);
+
+    chip.addEventListener('click', ()=>{
+      // toggle dataset visibility
+      const dsIndex = chartRef.data.datasets.findIndex(d => d.label === p.label);
+      if(dsIndex>=0){
+        const meta = chartRef.getDatasetMeta(dsIndex);
+        meta.hidden = !meta.hidden;
+        chip.classList.toggle('dim', meta.hidden);
+        chartRef.update();
+      }
+    });
+
+    sandLegendDiv.appendChild(chip);
+  });
+}
+
+// Rebuild
 function rebuildSandChart(){
   const labels = currentLabels();
   const period = currentPeriod;
   const key     = currentKey;
-  const includeConfirmed = showConfirmed;
-  const includePotential = showPotential;
 
   const perProjFn = (period==='weekly') ? perProjectWeekly : perProjectMonthly;
-  const listC = includeConfirmed ? perProjFn(projects, key, labels) : [];
-  const listP = includePotential ? perProjFn(potentialProjects, key, labels) : [];
+  const listC = showConfirmed ? perProjFn(projects, key, labels) : [];
+  const listP = showPotential ? perProjFn(potentialProjects, key, labels) : [];
 
-  // Combine whichever sources are enabled so stack matches visible total
+  // Combine enabled sources; compute % of total for legend
   const combined = mergeProjectLists(listC, listP);
+  const totalHours = combined.reduce((a,b)=>a+b.total,0) || 1;
 
-  // Rank & cut to Top N and "Other"
-  const TOP_N = 10;
+  // Rank & cut to Top N; rest => "Other"
+  const TOP_N = 11; // 10 + Other
   combined.sort((a,b)=> b.total - a.total);
   const top = combined.slice(0, TOP_N - 1);
   const rest = combined.slice(TOP_N - 1);
@@ -797,19 +919,34 @@ function rebuildSandChart(){
     top.push(other);
   }
 
+  // Populate focus dropdown (first option = none)
+  sandFocusSel.innerHTML = "";
+  const noneOpt = document.createElement('option'); noneOpt.value=""; noneOpt.textContent="— None —";
+  sandFocusSel.appendChild(noneOpt);
+  combined.forEach(p=>{
+    const o=document.createElement('option'); o.value=p.label; o.textContent=p.label;
+    if(p.label===sandFocusLabel) o.selected = true;
+    sandFocusSel.appendChild(o);
+  });
+
   // Build datasets
-  const ds = top.map((p,i)=>({
-    label: p.label,
-    data: p.data,
-    type: 'line',
-    fill: true,
-    tension: (period==='monthly') ? 0 : 0.15,
-    pointRadius: 0,
-    borderWidth: 1,
-    backgroundColor: colorFromIndex(i, 0.25),
-    borderColor: colorFromIndex(i, 1),
-    stack: 'all'
-  }));
+  const ds = top.map((p)=>{
+    const focused = (sandFocusLabel && p.label===sandFocusLabel);
+    const dimmed  = (sandFocusLabel && !focused);
+    return {
+      label: p.label,
+      _short: truncate(p.label, 24),
+      data: p.data,
+      type: 'line',
+      fill: true,
+      tension: (period==='monthly') ? 0 : 0.15,
+      pointRadius: 0,
+      borderWidth: focused ? 3 : 1,
+      backgroundColor: dimmed ? colorFor(p.label, 0.08) : colorFor(p.label, 0.28),
+      borderColor: dimmed ? colorFor(p.label, 0.45) : colorFor(p.label, 1),
+      stack: 'all'
+    };
+  });
 
   // Capacity overlay
   ds.push({
@@ -821,7 +958,8 @@ function rebuildSandChart(){
     borderWidth: 2,
     borderDash: [6,6],
     borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-    yAxisID: 'y'
+    yAxisID: 'y',
+    isCapacity: true
   });
 
   const ctxSand = document.getElementById('sandChart').getContext('2d');
@@ -839,8 +977,8 @@ function rebuildSandChart(){
         y: { title: { display: true, text: 'Hours' }, stacked: true, beginAtZero: true }
       },
       plugins: {
-        legend: { position: 'top' },
-        title: { display: true, text: 'Sand Chart — Per-Project Contribution (matches visible Load)' },
+        legend: { display: false }, // we provide our own chips
+        title: { display: true, text: 'Sand Chart — Per-Project Contribution' },
         annotation: {
           annotations: {
             todayLine: {
@@ -850,11 +988,28 @@ function rebuildSandChart(){
                        color: '#6b7280', backgroundColor: 'rgba(255,255,255,0.8)' }
             }
           }
+        },
+        rightEdgeLabels: {
+          enabled: sandLabelsChk.checked,
+          maxLabels: 10,
+          fontSize: 12,
+          truncate: 22
         }
       }
     }
   });
+
+  // Build clickable legend chips (Top N with percentages of horizon)
+  const legendList = top.map(p => ({
+    label: p.label,
+    pct: p.total / totalHours
+  }));
+  buildSandLegend(legendList, sandChart);
 }
+
+// Listeners for sand controls
+sandFocusSel.addEventListener('change', (e)=>{ sandFocusLabel = e.target.value || ""; rebuildSandChart(); });
+sandLabelsChk.addEventListener('change', ()=>{ rebuildSandChart(); });
 
 // -------------------- KPIs & REFRESH --------------------
 function updateKPIs(){
