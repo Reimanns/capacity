@@ -158,9 +158,10 @@ html_template = """
     .metric .value { font-weight:700; font-size:18px; }
     .chart-wrap { width:100%; height:720px; margin-bottom: 8px; position:relative; }
     .chart-wrap.util { height:380px; margin-top: 8px; }
+    .chart-wrap.sand { height:420px; margin-top: 6px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
-    /* Anchored popover for drilldown */
+    /* Anchored popover */
     .popover {
       display:none; position:fixed; z-index:9999; max-width:min(92vw, 900px);
       background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.2);
@@ -183,16 +184,16 @@ html_template = """
     .impact-table{ width:100%; border-collapse:collapse; margin-top:6px; }
     .impact-table th,.impact-table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:left; }
 
+    .inline-actions { display:flex; gap:10px; align-items:center; }
+    .ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; }
+
     details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
     details.impact summary{ cursor:pointer; font-weight:600; }
 
-    .hidden{ display:none !important; }
-
-    /* Manual section */
-    details.manual { border:1px dashed #e5e7eb; border-radius:10px; padding:8px 12px; background:#fcfcfc; margin:8px 0; }
-    details.manual summary{ cursor:pointer; font-weight:600; }
-    .hours-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:8px; margin-top:8px; }
-    .hours-grid label{ font-size:12px; display:flex; flex-direction:column; gap:4px; }
+    /* Manual What-If box */
+    .manual-box{ display:none; border:1px dashed #d1d5db; border-radius:10px; padding:10px; background:#fff; }
+    .manual-grid{ display:grid; gap:8px; grid-template-columns: repeat(4, minmax(120px,1fr)); }
+    .manual-grid label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
   </style>
 </head>
 <body>
@@ -203,13 +204,14 @@ html_template = """
   <label for="disciplineSelect"><strong>Discipline:</strong></label>
   <select id="disciplineSelect"></select>
 
+  <label><input type="checkbox" id="showConfirmed" checked> Show Confirmed</label>
   <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
   <label><input type="checkbox" id="showActual"> Show Actual</label>
 
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly</option>
+      <option value="monthly">Monthly (workdays)</option>
     </select>
   </label>
 
@@ -237,16 +239,14 @@ html_template = """
   <div class="impact-grid">
     <label>Source dataset
       <select id="impactSource">
-        <option value="manual" selected>Manual</option>
-        <option value="potential">Potential</option>
+        <option value="potential" selected>Potential</option>
         <option value="confirmed">Confirmed</option>
+        <option value="manual">Manual</option>
       </select>
     </label>
-
-    <label id="impactProjectWrap">Project
+    <label>Project
       <select id="impactProject"></select>
     </label>
-
     <label>Scope multiplier
       <input id="impactMult" type="number" step="0.05" value="1.00">
     </label>
@@ -267,35 +267,37 @@ html_template = """
       <input type="date" id="impactDel">
     </label>
 
-    <button id="impactRun">Calculate Impact</button>
-    <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
+    <div class="inline-actions" style="grid-column: span 2;">
+      <button id="impactRun">Calculate Impact</button>
+      <button id="impactClear" class="ghost">Clear What-If</button>
+    </div>
   </div>
 
-  <!-- MANUAL inputs (collapsible; shown only if Manual selected) -->
-  <details class="manual" id="manualPanel" open>
-    <summary>Manual project hours & meta</summary>
-    <div class="impact-grid" style="grid-template-columns: repeat(4, minmax(140px,1fr));">
+  <!-- Manual project inputs (hidden unless manual source chosen) -->
+  <div id="manualBox" class="manual-box">
+    <div class="manual-grid" id="manualFixed">
+      <label>Manual Project #
+        <input id="mNum" type="text" placeholder="PXXXX" />
+      </label>
       <label>Customer
-        <input id="manCustomer" type="text" placeholder="(optional)">
+        <input id="mCust" type="text" placeholder="Customer" />
       </label>
-      <label>Project number
-        <input id="manNumber" type="text" placeholder="(optional)">
+      <label>Induction
+        <input id="mInd" type="date" />
       </label>
-      <label>Aircraft model
-        <input id="manAircraft" type="text" placeholder="(optional)">
-      </label>
-      <label>Scope
-        <input id="manScope" type="text" placeholder="(optional)">
+      <label>Delivery
+        <input id="mDel" type="date" />
       </label>
     </div>
-    <div class="hours-grid" id="manualHours"></div>
-  </details>
+    <div class="manual-grid" id="manualHours" style="margin-top:8px;"></div>
+  </div>
 
   <div id="impactResult" class="impact-box"></div>
 </details>
 
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
 <div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
+<div class="chart-wrap sand"><canvas id="sandChart"></canvas></div>
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
@@ -347,17 +349,6 @@ function workdaysInMonth(d){
   const mEnd   = lastOfMonth(d);
   return workdaysInclusive(mStart, mEnd);
 }
-function addWorkdays(d, n){
-  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  let left = Math.max(0, Math.floor(n));
-  while(left>0){
-    t.setDate(t.getDate()+1);
-    const dow=t.getDay(); if(dow>=1 && dow<=5) left--;
-  }
-  return t;
-}
-function maxDate(a,b){ return (a>b) ? a : b; }
-function minDate(a,b){ return (a<b) ? a : b; }
 
 // -------------------- LABELS --------------------
 function getWeekList(){
@@ -495,6 +486,7 @@ sel.value=departmentCapacities[0]?.key || "";
 const prodSlider = document.getElementById('prodFactor');
 const prodVal = document.getElementById('prodVal');
 const hoursInput = document.getElementById('hoursPerFTE');
+const chkConf = document.getElementById('showConfirmed');
 const chkPot = document.getElementById('showPotential');
 const chkAct = document.getElementById('showActual');
 const periodSel = document.getElementById('periodSel');
@@ -511,14 +503,18 @@ function capacityArray(key, labels, period){
     return (capPerWeek / 5) * wd;  // scale by workdays in that month
   });
 }
-function utilizationArray(period, key, includePotential){
+function zeros(n){ return new Array(n).fill(0); }
+function utilizationArray(period, key, includeConfirmed, includePotential){
   const mapC = (period==='weekly') ? dataWConfirmed : dataMConfirmed;
   const mapP = (period==='weekly') ? dataWPotential : dataMPotential;
   const labels = (period==='weekly') ? weekLabels : monthLabels;
   const conf = mapC[key]?.series || [];
   const pot  = mapP[key]?.series || [];
   const cap  = capacityArray(key, labels, period);
-  return conf.map((v,i)=>{ const load = includePotential ? v + (pot[i]||0) : v; return cap[i] ? (100*load/cap[i]) : 0; });
+  return cap.map((c,i)=>{
+    const load = (includeConfirmed ? (conf[i]||0) : 0) + (includePotential ? (pot[i]||0) : 0);
+    return c ? (100*load/c) : 0;
+  });
 }
 
 const weekTodayLabel = ymd(mondayOf(new Date()));
@@ -531,6 +527,7 @@ const annos = { annotations:{ todayLine:{ type:'line', xMin: weekTodayLabel, xMa
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
 let currentPeriod = 'weekly';
+let showConfirmed = true;
 let showPotential = true;
 let showActual = false;
 let utilSeparate = true;
@@ -553,7 +550,7 @@ let chart = new Chart(ctx,{
       { label: ((dataMap('c')[currentKey]?.name)||'Dept') + ' Load (hrs)', data: (dataMap('c')[currentKey]?.series)||[],
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
-        borderWidth:2, fill:true, tension:0.1, pointRadius:0 },
+        borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showConfirmed },
       { label: ((dataMap('c')[currentKey]?.name)||'Dept') + ' Capacity (hrs)', data: capacityArray(currentKey, currentLabels(), currentPeriod),
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
@@ -566,7 +563,7 @@ let chart = new Chart(ctx,{
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
         borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual },
-      { label: 'Utilization %', data: utilizationArray(currentPeriod, currentKey, showPotential),
+      { label: 'Utilization %', data: utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential),
         borderColor:'#374151', backgroundColor:'rgba(55,65,81,0.12)',
         yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0 }
     ]
@@ -577,8 +574,7 @@ let chart = new Chart(ctx,{
     scales:{
       x:{ title:{display:true, text:'Week Starting'} },
       y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
-      y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150,
-           ticks:{ callback:(v)=> v + '%' } }
+      y2:{ title:{display:true, text:'Utilization %'}, beginAtZero:true, position:'right', grid:{ drawOnChartArea:false }, suggestedMax:150 }
     },
     plugins:{
       annotation: annos,
@@ -619,7 +615,6 @@ let chart = new Chart(ctx,{
         title = `${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`;
       } else { return; }
 
-      // anchor popover near click
       const native = evt?.native || evt?.nativeEvent || evt;
       const cx = (native?.clientX ?? 200);
       const cy = (native?.clientY ?? 200);
@@ -639,7 +634,7 @@ function createUtilChart(){
       labels: currentLabels(),
       datasets: [{
         label: 'Utilization %',
-        data: utilizationArray(currentPeriod, currentKey, showPotential),
+        data: utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential),
         borderColor: '#111827',
         backgroundColor: 'rgba(17,24,39,0.10)',
         borderWidth: 2,
@@ -653,8 +648,12 @@ function createUtilChart(){
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { title: { display: true, text: currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting' } },
-        y: { title: { display: true, text: 'Utilization %' }, beginAtZero: true, suggestedMax: 160,
-             ticks: { callback: (val) => `${val}%` } }
+        y: {
+          title: { display: true, text: 'Utilization %' },
+          beginAtZero: true,
+          suggestedMax: 160,
+          ticks: { callback: (val) => `${val}%` }
+        }
       },
       plugins: {
         legend: { display: false },
@@ -668,12 +667,18 @@ function createUtilChart(){
                        backgroundColor: 'rgba(255,255,255,0.8)' }
             },
             target100: {
-              type: 'line', yMin: 100, yMax: 100,
+              type: 'line',
+              yMin: 100, yMax: 100,
               borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-              borderWidth: 2, borderDash: [6,3],
-              label: { display: true, content: '100% target', position: 'end',
-                       backgroundColor: 'rgba(255,255,255,0.9)',
-                       color: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim() }
+              borderWidth: 2,
+              borderDash: [6,3],
+              label: {
+                display: true,
+                content: '100% target',
+                position: 'end',
+                backgroundColor: 'rgba(255,255,255,0.9)',
+                color: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+              }
             }
           }
         }
@@ -681,6 +686,7 @@ function createUtilChart(){
     }
   });
 }
+
 function rebuildUtilChart(){
   const wrap = document.querySelector('.chart-wrap.util');
   if (utilSeparate) {
@@ -696,13 +702,167 @@ function rebuildUtilChart(){
   chart.update();
 }
 
+// -------------------- SAND CHART (stacked per-project) --------------------
+let sandChart = null;
+function sumArrays(a,b){ const n=Math.max(a.length,b.length), out=new Array(n).fill(0);
+  for(let i=0;i<n;i++){ out[i]=(a[i]||0)+(b[i]||0); } return out; }
+function colorFromIndex(i, alpha=1){
+  const hue = (i*47) % 360;
+  return `hsla(${hue}, 65%, 55%, ${alpha})`;
+}
+function perProjectWeekly(arr, key, labels){
+  const out = [];
+  for(const p of arr){
+    const hrs = p[key]||0; if(!hrs) continue;
+    const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
+    if(isNaN(a) || isNaN(b) || b<a) continue;
+    const data = new Array(labels.length).fill(0);
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){
+      const L=parseDateLocalISO(labels[i]);
+      if(L>=a && s===-1) s=i;
+      if(L<=b) e=i;
+    }
+    if(s!==-1 && e!==-1 && e>=s){
+      const n=e-s+1, per=hrs/n;
+      for(let i=s;i<=e;i++){ data[i]+=per; }
+      const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+      out.push({ label, data, total: hrs });
+    }
+  }
+  return out;
+}
+function perProjectMonthly(arr, key, labels){
+  const out = [];
+  for(const p of arr){
+    const hrs = p[key]||0; if(!hrs) continue;
+    const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
+    if(isNaN(a) || isNaN(b) || b<a) continue;
+    const projWD = Math.max(1, workdaysInclusive(a,b));
+    const data = new Array(labels.length).fill(0);
+    for(let i=0;i<labels.length;i++){
+      const mStart = parseDateLocalISO(labels[i]);
+      const mEnd   = lastOfMonth(mStart);
+      const ovS = new Date(Math.max(mStart, a));
+      const ovE = new Date(Math.min(mEnd, b));
+      if(ovE >= ovS){
+        const monWD = workdaysInclusive(ovS, ovE);
+        data[i] += hrs * (monWD / projWD);
+      }
+    }
+    const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+    out.push({ label, data, total: hrs });
+  }
+  return out;
+}
+function mergeProjectLists(A, B){
+  const map = new Map();
+  A.forEach(x => map.set(x.label, { label:x.label, data:x.data.slice(), total:x.total }));
+  B.forEach(x => {
+    if(map.has(x.label)){
+      const cur = map.get(x.label);
+      cur.data = sumArrays(cur.data, x.data);
+      cur.total += x.total;
+    } else {
+      map.set(x.label, { label:x.label, data:x.data.slice(), total:x.total });
+    }
+  });
+  return Array.from(map.values());
+}
+function rebuildSandChart(){
+  const labels = currentLabels();
+  const period = currentPeriod;
+  const key     = currentKey;
+  const includeConfirmed = showConfirmed;
+  const includePotential = showPotential;
+
+  const perProjFn = (period==='weekly') ? perProjectWeekly : perProjectMonthly;
+  const listC = includeConfirmed ? perProjFn(projects, key, labels) : [];
+  const listP = includePotential ? perProjFn(potentialProjects, key, labels) : [];
+
+  // Combine whichever sources are enabled so stack matches visible total
+  const combined = mergeProjectLists(listC, listP);
+
+  // Rank & cut to Top N and "Other"
+  const TOP_N = 10;
+  combined.sort((a,b)=> b.total - a.total);
+  const top = combined.slice(0, TOP_N - 1);
+  const rest = combined.slice(TOP_N - 1);
+  if(rest.length){
+    const other = rest.reduce((acc, x) => {
+      acc.total += x.total;
+      acc.data = sumArrays(acc.data, x.data);
+      return acc;
+    }, { label: "Other", total: 0, data: new Array(labels.length).fill(0) });
+    top.push(other);
+  }
+
+  // Build datasets
+  const ds = top.map((p,i)=>({
+    label: p.label,
+    data: p.data,
+    type: 'line',
+    fill: true,
+    tension: (period==='monthly') ? 0 : 0.15,
+    pointRadius: 0,
+    borderWidth: 1,
+    backgroundColor: colorFromIndex(i, 0.25),
+    borderColor: colorFromIndex(i, 1),
+    stack: 'all'
+  }));
+
+  // Capacity overlay
+  ds.push({
+    label: 'Capacity (hrs)',
+    data: capacityArray(key, labels, period),
+    type: 'line',
+    fill: false,
+    pointRadius: 0,
+    borderWidth: 2,
+    borderDash: [6,6],
+    borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+    yAxisID: 'y'
+  });
+
+  const ctxSand = document.getElementById('sandChart').getContext('2d');
+  const todayX = (period==='weekly') ? weekTodayLabel : monthTodayLabel;
+
+  if(sandChart){ sandChart.destroy(); sandChart = null; }
+  sandChart = new Chart(ctxSand, {
+    type: 'line',
+    data: { labels, datasets: ds },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { title: { display: true, text: period==='weekly' ? 'Week Starting' : 'Month Starting' } },
+        y: { title: { display: true, text: 'Hours' }, stacked: true, beginAtZero: true }
+      },
+      plugins: {
+        legend: { position: 'top' },
+        title: { display: true, text: 'Sand Chart — Per-Project Contribution (matches visible Load)' },
+        annotation: {
+          annotations: {
+            todayLine: {
+              type: 'line', xMin: todayX, xMax: todayX,
+              borderColor: '#9ca3af', borderWidth: 1, borderDash: [4,4],
+              label: { display: true, content: 'Today', position: 'start',
+                       color: '#6b7280', backgroundColor: 'rgba(255,255,255,0.8)' }
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
 // -------------------- KPIs & REFRESH --------------------
 function updateKPIs(){
   const labels = currentLabels();
   const capArr = capacityArray(currentKey, labels, currentPeriod);
-  const conf = (dataMap('c')[currentKey]?.series)||[];
-  const pot  = (dataMap('p')[currentKey]?.series)||[];
-  const combined = conf.map((v,i)=> v + (showPotential ? (pot[i]||0) : 0));
+  const conf = (dataMap('c')[currentKey]?.series)||zeros(labels.length);
+  const pot  = (dataMap('p')[currentKey]?.series)||zeros(labels.length);
+  const combined = conf.map((v,i)=> (showConfirmed ? v : 0) + (showPotential ? (pot[i]||0) : 0));
   let peak=0, peakIdx=0, worstDiff=-Infinity, worstIdx=0;
   for(let i=0;i<combined.length;i++){
     const u = capArr[i] ? (combined[i]/capArr[i]*100) : 0;
@@ -730,10 +890,12 @@ function refreshDatasets(){
   chart.data.datasets[2].data  = (dataMap('p')[currentKey]?.series)||[];
   chart.data.datasets[3].label = `${deptName} Actual (hrs)`;
   chart.data.datasets[3].data  = (dataMap('a')[currentKey]?.series)||[];
+
+  chart.data.datasets[0].hidden = !showConfirmed;
   chart.data.datasets[2].hidden = !showPotential;
   chart.data.datasets[3].hidden = !showActual;
 
-  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
+  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential);
 
   const monthly = currentPeriod==='monthly';
   chart.data.datasets.forEach((ds, i)=>{
@@ -751,7 +913,7 @@ function refreshDatasets(){
 
   if (utilChart) {
     utilChart.data.labels = currentLabels();
-    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showPotential);
+    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential);
     utilChart.options.scales.x.title.text = (currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting');
     const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
     utilChart.options.plugins.annotation.annotations.todayLine.xMin = todayX;
@@ -759,10 +921,13 @@ function refreshDatasets(){
     utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
     utilChart.update();
   }
+
+  rebuildSandChart();
 }
 
 // -------------------- LISTENERS --------------------
 sel.addEventListener('change', e=>{ currentKey = e.target.value; refreshDatasets(); });
+chkConf.addEventListener('change', e=>{ showConfirmed = e.target.checked; refreshDatasets(); });
 chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
 chkAct.addEventListener('change', e=>{ showActual = e.target.checked; refreshDatasets(); });
 prodSlider.addEventListener('input', e=>{
@@ -784,7 +949,7 @@ utilSepChk.addEventListener('change', e=>{
   rebuildUtilChart();
 });
 
-// -------------------- POPOVER (single vs combined), anchored near click --------------------
+// -------------------- POPOVER --------------------
 const pop = document.getElementById('drillPopover');
 const popTitle = document.getElementById('popTitle');
 const popHead = document.getElementById('popHead');
@@ -792,6 +957,7 @@ const popBody = document.getElementById('popBody');
 document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
 
 function placePopoverAt(x, y){
+  pop.style.display='block'; // to get size
   const rect = pop.getBoundingClientRect();
   const pad = 12;
   const vw = window.innerWidth; const vh = window.innerHeight;
@@ -810,7 +976,6 @@ function openPopoverSingle(title, rows, x, y){
   popBody.innerHTML = (rows&&rows.length)
     ? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join('')
     : `<tr><td colspan="2">No data</td></tr>`;
-  pop.style.display='block';
   placePopoverAt(x, y);
 }
 function mergeConfirmedPotential(bc, bp){
@@ -834,80 +999,91 @@ function openPopoverCombined(title, rows, x, y){
   } else {
     popBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
   }
-  pop.style.display='block';
   placePopoverAt(x, y);
 }
 
-// ------- WHAT-IF SCHEDULE IMPACT (Manual + Clear) -------
+// ------- WHAT-IF SCHEDULE IMPACT -------
 const impactSource = document.getElementById('impactSource');
-const impactProjectWrap = document.getElementById('impactProjectWrap');
 const impactProjectSel = document.getElementById('impactProject');
 const impactMult = document.getElementById('impactMult');
 const impactLead = document.getElementById('impactLead');
 const impactOT = document.getElementById('impactOT');
-const impactTarget = document.getElementById('impactTarget'); // reserved
+const impactTarget = document.getElementById('impactTarget'); // reserved for future
 const impactInd = document.getElementById('impactInd');
 const impactDel = document.getElementById('impactDel');
 const impactRun = document.getElementById('impactRun');
 const impactClear = document.getElementById('impactClear');
 const impactResult = document.getElementById('impactResult');
 
-const manualPanel = document.getElementById('manualPanel');
-const manualHoursDiv = document.getElementById('manualHours');
-const manCustomer = document.getElementById('manCustomer');
-const manNumber = document.getElementById('manNumber');
-const manAircraft = document.getElementById('manAircraft');
-const manScope = document.getElementById('manScope');
-
-function buildManualHoursInputs(){
-  manualHoursDiv.innerHTML = "";
-  departmentCapacities.forEach(d=>{
-    const lab = document.createElement('label');
-    lab.innerHTML = `${d.name}<input id="manH_${d.key}" type="number" min="0" step="1" value="0">`;
-    manualHoursDiv.appendChild(lab);
-  });
+function fmtDateInput(d){
+  const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
 }
-buildManualHoursInputs();
-
+function addWorkdays(d, n){
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let left = Math.max(0, Math.floor(n));
+  while(left>0){
+    t.setDate(t.getDate()+1);
+    const dow=t.getDay(); if(dow>=1 && dow<=5) left--;
+  }
+  return t;
+}
+function maxDate(a,b){ return (a>b) ? a : b; }
+function minDate(a,b){ return (a<b) ? a : b; }
 function impactSourceProjects(){
   const src = impactSource.value;
   return (src==='potential') ? potentialProjects : projects;
 }
 function setImpactProjects(){
   const src = impactSource.value;
-  const isManual = (src === 'manual');
-  // Toggle UI
-  impactProjectWrap.classList.toggle('hidden', isManual);
-  manualPanel.style.display = isManual ? 'block' : 'none';
-
-  if (isManual){
-    // leave induction/delivery untouched; user will set them
-    return;
-  }
-  const arr = impactSourceProjects();
+  const arr = (src==='manual') ? [] : impactSourceProjects();
   impactProjectSel.innerHTML = "";
-  arr.forEach((p, i)=>{
-    const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
-    const opt = document.createElement('option');
-    opt.value = String(i); opt.textContent = label;
-    impactProjectSel.appendChild(opt);
-  });
-  if(arr.length){
-    const p = arr[0];
-    if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
-    if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
-  } else {
-    impactInd.value = ""; impactDel.value = "";
+  if(src!=='manual'){
+    arr.forEach((p, i)=>{
+      const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+      const opt = document.createElement('option');
+      opt.value = String(i); opt.textContent = label;
+      impactProjectSel.appendChild(opt);
+    });
+    if(arr.length){
+      const p = arr[0];
+      impactInd.value = p?.induction ? String(p.induction).slice(0,10) : "";
+      impactDel.value = p?.delivery ? String(p.delivery).slice(0,10) : "";
+    } else {
+      impactInd.value = ""; impactDel.value = "";
+    }
   }
+  // toggle manual box visibility
+  document.getElementById('manualBox').style.display = (src==='manual') ? 'block' : 'none';
+  // disable project dropdown if manual
+  impactProjectSel.disabled = (src==='manual');
 }
 impactSource.addEventListener('change', setImpactProjects);
 impactProjectSel.addEventListener('change', ()=>{
   const arr = impactSourceProjects();
   const p = arr[Number(impactProjectSel.value)||0];
   if(!p) return;
-  if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
-  if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
+  impactInd.value = p?.induction ? String(p.induction).slice(0,10) : "";
+  impactDel.value = p?.delivery ? String(p.delivery).slice(0,10) : "";
 });
+
+// Build manual hours fields based on departments
+(function buildManualHours(){
+  const wrap = document.getElementById('manualHours');
+  wrap.innerHTML = "";
+  departmentCapacities.forEach(d=>{
+    const lbl = document.createElement('label');
+    lbl.innerHTML = `${d.name} hours <input type="number" step="1" min="0" id="mH_${d.key}" value="0">`;
+    wrap.appendChild(lbl);
+  });
+  // default manual dates to two weeks from today and +10 workdays
+  const today = new Date();
+  const ind = addWorkdays(today, 10);
+  const del = addWorkdays(ind, 10);
+  document.getElementById('mInd').value = fmtDateInput(ind);
+  document.getElementById('mDel').value = fmtDateInput(del);
+})();
+
 setImpactProjects();
 
 // Compute capacity per day for a department
@@ -917,14 +1093,10 @@ function capPerDay(key, overtimePct){
   const uplift = 1 + Math.max(0, (parseFloat(overtimePct)||0))/100;
   return (perWeek * uplift) / 5.0;
 }
-
-// Baseline arrays (confirmed only) for the current period
 function baselineSeries(period, key){
   const mapC = (period==='weekly') ? dataWConfirmed : dataMConfirmed;
   return (mapC[key]?.series || []).slice();
 }
-
-// Period index range covering [start..end]
 function periodRange(period, labels, start, end){
   let s=-1, e=-1;
   for(let i=0;i<labels.length;i++){
@@ -937,15 +1109,13 @@ function periodRange(period, labels, start, end){
   if(s===-1 || e===-1 || e<s) return null;
   return {s,e};
 }
-
-// Hours by period for the one selected project (uniform over workdays)
 function projectHoursSeries(period, key, proj, mult, labels){
   const total = new Array(labels.length).fill(0);
   const hrs = (proj[key]||0) * (mult||1);
   if(hrs<=0) return total;
 
-  const a = parseDateLocalISO( impactInd.value && impactInd.value.length>=10 ? impactInd.value : proj.induction );
-  const b = parseDateLocalISO( impactDel.value && impactDel.value.length>=10 ? impactDel.value : proj.delivery  );
+  const a = parseDateLocalISO( proj.__ind || proj.induction );
+  const b = parseDateLocalISO( proj.__del || proj.delivery  );
   if(isNaN(a)||isNaN(b) || b<a) return total;
 
   if(period==='weekly'){
@@ -968,8 +1138,6 @@ function projectHoursSeries(period, key, proj, mult, labels){
   }
   return total;
 }
-
-// Sum headroom (confirmed capacity minus confirmed load) in the window for a dept
 function sumHeadroom(period, key, start, end, overtimePct){
   const labels = (period==='weekly') ? weekLabels : monthLabels;
   const cap = capacityArray(key, labels, period);
@@ -984,10 +1152,9 @@ function sumHeadroom(period, key, start, end, overtimePct){
   }
   return sum;
 }
-
 function renderImpactResult(obj){
   const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
-  const dfmt = d=>ymd(d);
+  const dfmt = d=>fmtDateInput(d);
   let html = `
     <div><strong>Earliest allowable induction:</strong> ${dfmt(earliestStart)}</div>
     <div><strong>Requested induction:</strong> ${dfmt(targetStart)}</div>
@@ -1021,37 +1188,33 @@ function renderImpactResult(obj){
   };
   chart.update();
 }
-
 impactRun.addEventListener('click', ()=>{
   const src = impactSource.value;
-  const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
-  const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
-  const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
 
-  // Build the project under test
   let proj = null;
-  if (src === 'manual'){
-    // require dates
-    const indVal = impactInd.value;
-    const delVal = impactDel.value;
-    if(!indVal || !delVal){ impactResult.textContent = "Please set induction and delivery for Manual."; return; }
-    proj = { induction: indVal, delivery: delVal };
-    // attach hours from manual grid
+  if(src==='manual'){
+    proj = { number: document.getElementById('mNum').value || 'Manual',
+             customer: document.getElementById('mCust').value || '—',
+             induction: document.getElementById('mInd').value,
+             delivery:  document.getElementById('mDel').value };
+    // collect manual hours
     departmentCapacities.forEach(d=>{
-      const el = document.getElementById('manH_'+d.key);
-      const v = parseFloat(el?.value || '0') || 0;
+      const v = parseFloat(document.getElementById('mH_'+d.key).value||'0')||0;
       proj[d.key] = v;
     });
   } else {
     const arr = impactSourceProjects();
     const idx = Number(impactProjectSel.value)||0;
     proj = arr[idx];
-    if(!proj){ impactResult.textContent = "No project selected."; return; }
   }
+  if(!proj){ impactResult.textContent = "No project selected."; return; }
 
-  const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
-  const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
+  const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
+  const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
+  const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
 
+  const rawStart = parseDateLocalISO(impactInd.value ? impactInd.value : (proj.__ind || proj.induction));
+  const rawEnd   = parseDateLocalISO(impactDel.value ? impactDel.value : (proj.__del || proj.delivery));
   if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){
     impactResult.textContent = "Invalid induction/delivery dates."; return;
   }
@@ -1069,10 +1232,13 @@ impactRun.addEventListener('click', ()=>{
     const key = d.key;
     const name = d.name;
     const capDay = capPerDay(key, otPct);
+
     const H = (proj[key]||0)*mult;
+
     const head = sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct);
-    const short = Math.max(0, H - head);
-    const slip = (short>0 && capDay>0) ? Math.ceil(short / capDay) : 0;
+
+    let short = Math.max(0, H - head);
+    let slip = (short>0 && capDay>0) ? Math.ceil(short / capDay) : 0;
 
     overallSlip = Math.max(overallSlip, slip);
     rows.push({name, h:H, head, short, slip});
@@ -1084,18 +1250,14 @@ impactRun.addEventListener('click', ()=>{
     earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows
   });
 });
-
-// ---- Clear What-If
 impactClear.addEventListener('click', ()=>{
+  delete chart.options.plugins.annotation.annotations.whatIfStart;
+  delete chart.options.plugins.annotation.annotations.whatIfEnd;
+  chart.update();
   impactResult.innerHTML = "";
-  if (chart?.options?.plugins?.annotation?.annotations){
-    delete chart.options.plugins.annotation.annotations.whatIfStart;
-    delete chart.options.plugins.annotation.annotations.whatIfEnd;
-    chart.update();
-  }
 });
 
-// ---------- Initialize ----------
+// initial render
 refreshDatasets();
 rebuildUtilChart();
 </script>
@@ -1112,5 +1274,5 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-# Make the iframe tall and disable its own scrolling to avoid double scrollbars
-components.html(html_code, height=1750, scrolling=False)
+# Taller iframe; no inner scroll (prevents double scrollbars)
+components.html(html_code, height=2100, scrolling=False)
