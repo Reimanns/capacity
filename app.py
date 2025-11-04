@@ -12,7 +12,7 @@ try:
 except Exception:
     pass
 
-# --------------------- DEFAULT DATA ---------------------
+# --------------------- DEFAULT DATA (YOUR SET) ---------------------
 DEFAULT_PROJECTS = [
     {"number":"P7657","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-15T00:00:00","delivery":"2025-11-25T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37},
     {"number":"P7611","customer":"Alpha Star","aircraftModel":None,"scope":None,"induction":"2025-10-20T00:00:00","delivery":"2025-12-04T00:00:00","Maintenance":2432.23,"Structures":1252.97,"Avionics":737.04,"Inspection":1474.08,"Interiors":1474.08,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
@@ -145,7 +145,7 @@ html_template = """
     try { if (window['chartjs-plugin-annotation']) { Chart.register(window['chartjs-plugin-annotation']); } } catch(e) {}
   </script>
 
-  <!-- ECharts for Sankey & Treemap -->
+  <!-- ECharts for Sankey & Treemap (reliable UMD build) -->
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 
   <style>
@@ -203,11 +203,11 @@ html_template = """
     .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
     .manual-hours { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(100px,1fr)); margin-top:10px; }
 
-    /* Normalize manual inputs with the rest */
+    /* ——— Normalize manual "hours" inputs to match the rest ——— */
     .manual-panel input,
     .manual-panel select,
     .manual-hours input {
-      font-size: 13px;
+      font-size: 13px;          /* match impact-grid controls */
       line-height: 1.25;
       padding: 8px 10px;
       border: 1px solid #e5e7eb;
@@ -215,11 +215,27 @@ html_template = """
       width: 100%;
       box-sizing: border-box;
     }
-    .manual-hours label { font-size: 12px; display:flex; flex-direction:column; gap:6px; }
-    .manual-grid, .manual-hours { align-items: end; }
-    .manual-panel input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+    .manual-hours label {
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .manual-grid,
+    .manual-hours {
+      align-items: end;
+    }
+    .manual-panel input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
     .manual-panel input[type="number"]::-webkit-outer-spin-button,
-    .manual-panel input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .manual-panel input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
 
     /* Snapshot breakdown */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
@@ -233,18 +249,6 @@ html_template = """
     .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
     .snap-echart { width:100%; flex:1 1 auto; }
 
-    /* --- Scenario Compare --- */
-    details.scenario { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 12px; }
-    details.scenario summary { cursor:pointer; font-weight:600; }
-    .scenario-grid{ display:grid; gap:10px; grid-template-columns: repeat(3, minmax(260px,1fr)); }
-    .scenario-card{ background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; }
-    .scenario-card h4{ margin:0 0 2px 0; font-size:14px; color:#111827; }
-    .scenario-card label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
-    .scenario-card input, .scenario-card select{ padding:8px; border:1px solid #e5e7eb; border-radius:8px; font-size:13px; }
-    .scenario-actions{ display:flex; gap:10px; align-items:center; margin-top:8px; }
-    .scenario-results{ margin-top:6px; }
-    .scenario-results table{ width:100%; border-collapse:collapse; }
-    .scenario-results th,.scenario-results td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:left; font-size:13px; }
   </style>
 </head>
 <body>
@@ -353,56 +357,6 @@ html_template = """
   <div id="impactResult" class="impact-box"></div>
 </details>
 
-<!-- Scenario Compare (Baseline vs A vs B) -->
-<details class="scenario" open>
-  <summary>Scenario Compare — Baseline vs A vs B</summary>
-
-  <div class="scenario-grid">
-    <!-- Baseline -->
-    <div class="scenario-card" id="sc_base">
-      <h4>Baseline</h4>
-      <label>Include Confirmed <input type="checkbox" id="sc_base_c" checked></label>
-      <label>Include Potential <input type="checkbox" id="sc_base_p"></label>
-      <label>Global OT % <input type="number" id="sc_base_ot" step="5" value="0"></label>
-      <label>Target Util % <input type="number" id="sc_base_tar" step="5" value="100"></label>
-      <label>Min Lead (workdays) <input type="number" id="sc_base_lead" step="1" value="14"></label>
-      <label>Project (optional) <select id="sc_base_proj"></select></label>
-      <label>Penalty $ / day <input type="number" id="sc_base_pen" step="100" value="0"></label>
-    </div>
-
-    <!-- Scenario A -->
-    <div class="scenario-card" id="sc_A">
-      <h4>Scenario A</h4>
-      <label>Include Confirmed <input type="checkbox" id="sc_A_c" checked></label>
-      <label>Include Potential <input type="checkbox" id="sc_A_p" checked></label>
-      <label>Global OT % <input type="number" id="sc_A_ot" step="5" value="10"></label>
-      <label>Target Util % <input type="number" id="sc_A_tar" step="5" value="100"></label>
-      <label>Min Lead (workdays) <input type="number" id="sc_A_lead" step="1" value="14"></label>
-      <label>Project (optional) <select id="sc_A_proj"></select></label>
-      <label>Penalty $ / day <input type="number" id="sc_A_pen" step="100" value="25000"></label>
-    </div>
-
-    <!-- Scenario B -->
-    <div class="scenario-card" id="sc_B">
-      <h4>Scenario B</h4>
-      <label>Include Confirmed <input type="checkbox" id="sc_B_c"></label>
-      <label>Include Potential <input type="checkbox" id="sc_B_p" checked></label>
-      <label>Global OT % <input type="number" id="sc_B_ot" step="5" value="0"></label>
-      <label>Target Util % <input type="number" id="sc_B_tar" step="5" value="95"></label>
-      <label>Min Lead (workdays) <input type="number" id="sc_B_lead" step="1" value="7"></label>
-      <label>Project (optional) <select id="sc_B_proj"></select></label>
-      <label>Penalty $ / day <input type="number" id="sc_B_pen" step="100" value="25000"></label>
-    </div>
-  </div>
-
-  <div class="scenario-actions">
-    <button id="sc_run">Run scenarios</button>
-    <span style="font-size:12px;color:#6b7280;">Uses the <em>current</em> Discipline above; OT% only affects comparison (not the main chart).</span>
-  </div>
-
-  <div class="scenario-results" id="sc_results"></div>
-</details>
-
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
 <div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
 
@@ -414,11 +368,21 @@ html_template = """
   <div class="snap-controls">
     <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
     <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
+
     <label>Top N projects
       <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
       <span id="snapTopNVal">8</span>
     </label>
-    <span class="snap-legend">
+
+    <label>From
+      <input type="date" id="snapFrom">
+    </label>
+    <label>To
+      <input type="date" id="snapTo">
+    </label>
+    <button id="snapReset" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;">Reset</button>
+
+    <span class="snap-legend" style="margin-left:auto">
       <span class="chip"><span class="dot" style="background:var(--confirmed)"></span> Confirmed</span>
       <span class="chip"><span class="dot" style="background:var(--potential2)"></span> Potential</span>
     </span>
@@ -834,6 +798,8 @@ function refreshDatasets(){
     utilChart.update();
   }
 
+  // keep snapshot date inputs in range whenever labels change
+  syncSnapshotRangeToLabels();
   rebuildSnapshot();
 }
 
@@ -968,168 +934,6 @@ impactRun.addEventListener('click', ()=>{
 });
 impactClear.addEventListener('click', ()=>{ impactResult.innerHTML=""; if(chart?.options?.plugins?.annotation?.annotations){ delete chart.options.plugins.annotation.annotations.whatIfStart; delete chart.options.plugins.annotation.annotations.whatIfEnd; chart.update(); } });
 
-// -------------------- Scenario Compare (Baseline vs A vs B) --------------------
-function capacityArrayWithOT(key, labels, period, otPct){
-  const uplift = 1 + Math.max(0,(parseFloat(otPct)||0))/100;
-  return capacityArray(key, labels, period).map(v => v * uplift);
-}
-
-function scenarioKPIs(opts){
-  // opts: {includeC, includeP, ot, target, leadDays, projIndex, penalty}
-  const key = currentKey;
-  const labels = currentLabels();
-  const period = currentPeriod;
-
-  const mapC = (period==='weekly' ? dataWConfirmed : dataMConfirmed)[key]?.series || [];
-  const mapP = (period==='weekly' ? dataWPotential : dataMPotential)[key]?.series || [];
-  const zero = new Array(labels.length).fill(0);
-  const load = (opts.includeC ? mapC : zero).map((v,i)=> v + (opts.includeP ? (mapP[i]||0) : 0));
-
-  const cap  = capacityArrayWithOT(key, labels, period, opts.ot);
-  const util = load.map((v,i)=> cap[i] ? (100*v/cap[i]) : 0);
-  const peak = util.reduce((m,v)=> Math.max(m,v), 0);
-  const periodsOver = util.filter(u => u > (parseFloat(opts.target)||100)).length;
-
-  // Optional project slip/penalty
-  let slipWD = 0, penCost = 0, projLabel = '—';
-  const all = projects.concat(potentialProjects);
-  const idx = parseInt(opts.projIndex ?? -1, 10);
-  if(!isNaN(idx) && idx >= 0 && idx < all.length){
-    const proj = all[idx]; projLabel = projectLabel(proj);
-    const startRaw = parseDateLocalISO(proj.induction);
-    const endRaw   = parseDateLocalISO(proj.delivery);
-
-    function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1 && dow<=5) left--; } return t; }
-    const leadReady = addWD(new Date(), Math.max(0, parseInt(opts.leadDays||0,10) ));
-    const start = (startRaw > leadReady) ? startRaw : leadReady;
-
-    function capPerDayDept(keyDept){ const dept=departmentCapacities.find(x=>x.key===keyDept); const perWeek=(dept?.headcount||0)*HOURS_PER_FTE*PRODUCTIVITY_FACTOR; const uplift=1+Math.max(0,(parseFloat(opts.ot)||0))/100; return (perWeek*uplift)/5.0; }
-    function periodRange(period, labels, start, end){
-      let s=-1,e=-1;
-      for(let i=0;i<labels.length;i++){
-        const L=parseDateLocalISO(labels[i]);
-        const Pstart=(period==='weekly')?mondayOf(L):firstOfMonth(L);
-        const Pend  =(period==='weekly')?new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6):lastOfMonth(L);
-        if(s===-1 && Pend>=start) s=i;
-        if(Pstart<=end) e=i;
-      }
-      if(s===-1 || e===-1 || e<s) return null; return {s,e};
-    }
-    function sumHeadroom2(period, keyDept, start, end){
-      const labels=(period==='weekly')?weekLabels:monthLabels;
-      const capArr=capacityArrayWithOT(keyDept, labels, period, opts.ot);
-      const base  =(period==='weekly'?dataWConfirmed:dataMConfirmed)[keyDept]?.series || [];
-      const rng   = periodRange(period, labels, start, end);
-      if(!rng) return 0;
-      let sum=0; for(let i=rng.s;i<=rng.e;i++){ sum += Math.max(0, (capArr[i]||0) - (base[i]||0)); }
-      return sum;
-    }
-
-    const worst = departmentCapacities.map(d=>{
-      const H = parseFloat(proj[d.key]||0);
-      const head = sumHeadroom2(period, d.key, start, endRaw);
-      const short = Math.max(0, H - head);
-      const dayCap = capPerDayDept(d.key);
-      const slip = (short>0 && dayCap>0) ? Math.ceil(short/dayCap) : 0;
-      return slip;
-    }).reduce((m,v)=>Math.max(m,v), 0);
-
-    slipWD = worst;
-    const penalty = Math.max(0, parseFloat(opts.penalty||0));
-    penCost = penalty * slipWD;
-  }
-
-  return {
-    discipline: (dataMap('c')[key]?.name) || 'Dept',
-    peakUtil: peak,
-    periodsOver,
-    projLabel,
-    slipWD,
-    penCost
-  };
-}
-
-function fillScenarioProjectSelects(){
-  const all = projects.concat(potentialProjects);
-  const ids = ['sc_base_proj','sc_A_proj','sc_B_proj'];
-  ids.forEach(id=>{
-    const sel = document.getElementById(id);
-    sel.innerHTML = '';
-    const none = document.createElement('option'); none.value=''; none.textContent='— (none)'; sel.appendChild(none);
-    all.forEach((p,i)=>{
-      const opt = document.createElement('option');
-      opt.value=String(i);
-      opt.textContent = projectLabel(p);
-      sel.appendChild(opt);
-    });
-  });
-}
-
-function runScenarios(){
-  const defs = [
-    { name:'Baseline', pfx:'base' },
-    { name:'Scenario A', pfx:'A' },
-    { name:'Scenario B', pfx:'B' },
-  ];
-  const rows = defs.map(d=>{
-    const includeC = document.getElementById(`sc_${d.pfx}_c`).checked;
-    const includeP = document.getElementById(`sc_${d.pfx}_p`).checked;
-    const ot   = parseFloat(document.getElementById(`sc_${d.pfx}_ot`).value||'0');
-    const tar  = parseFloat(document.getElementById(`sc_${d.pfx}_tar`).value||'100');
-    const lead = parseInt(document.getElementById(`sc_${d.pfx}_lead`).value||'14',10);
-    const proj = document.getElementById(`sc_${d.pfx}_proj`).value;
-    const pen  = parseFloat(document.getElementById(`sc_${d.pfx}_pen`).value||'0');
-
-    const k = scenarioKPIs({ includeC, includeP, ot, target:tar, leadDays:lead, projIndex:proj===''?null:proj, penalty:pen });
-
-    return {
-      name:d.name,
-      disc:k.discipline,
-      peak: k.peakUtil,
-      periodsOver: k.periodsOver,
-      project: k.projLabel,
-      slipWD: k.slipWD,
-      penalty: k.penCost
-    };
-  });
-
-  const fmt = n => (typeof n==='number' && isFinite(n)) ? n.toFixed(0) : '—';
-  const fmtMoney = n => (typeof n==='number' && isFinite(n)) ? `$${Math.round(n).toLocaleString()}` : '—';
-
-  const html = `
-    <table>
-      <thead>
-        <tr>
-          <th>Scenario</th>
-          <th>Discipline</th>
-          <th>Peak Util %</th>
-          <th># Periods > Target</th>
-          <th>Project (optional)</th>
-          <th>Slip (workdays)</th>
-          <th>Penalty Cost</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r=>`
-          <tr>
-            <td>${r.name}</td>
-            <td>${r.disc}</td>
-            <td><strong>${fmt(r.peak)}</strong>%</td>
-            <td>${fmt(r.periodsOver)}</td>
-            <td>${r.project}</td>
-            <td>${fmt(r.slipWD)}</td>
-            <td>${fmtMoney(r.penalty)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>`;
-  document.getElementById('sc_results').innerHTML = html;
-}
-
-// init & events for Scenario Compare
-fillScenarioProjectSelects();
-document.getElementById('sc_run').addEventListener('click', runScenarios);
-
 // -------------------- Snapshot (ECharts Sankey + Treemap, Chart.js Pareto) --------------------
 let sankeyE=null, treemapE=null, paretoChart=null;
 const snapConfirmed=document.getElementById('snapConfirmed');
@@ -1140,7 +944,49 @@ snapConfirmed.addEventListener('change', rebuildSnapshot);
 snapPotential.addEventListener('change', rebuildSnapshot);
 snapTopN.addEventListener('input', ()=>{ snapTopNVal.textContent=snapTopN.value; rebuildSnapshot(); });
 
+const snapFrom = document.getElementById('snapFrom');
+const snapTo   = document.getElementById('snapTo');
+const snapReset = document.getElementById('snapReset');
+
 const keyColor={ confirmed:getComputedStyle(document.documentElement).getPropertyValue('--confirmed').trim()||'#2563eb', potential:getComputedStyle(document.documentElement).getPropertyValue('--potential2').trim()||'#059669' };
+
+// ---- snapshot date-range helpers ----
+function labelsMinMaxDates(){
+  const labels = currentLabels();
+  if (!labels.length) return {min:null, max:null};
+  const min = parseDateLocalISO(labels[0]);
+  const max = parseDateLocalISO(labels[labels.length - 1]);
+  return {min, max};
+}
+function clampDateToLabels(d){
+  const {min, max} = labelsMinMaxDates();
+  if (!min || !max || isNaN(d)) return d;
+  if (d < min) return min;
+  if (d > max) return max;
+  return d;
+}
+function syncSnapshotRangeToLabels({force=false} = {}){
+  const {min, max} = labelsMinMaxDates();
+  if (!min || !max) return;
+  if (force || !snapFrom.value) snapFrom.value = fmtDateInput(min);
+  if (force || !snapTo.value)   snapTo.value   = fmtDateInput(max);
+  snapFrom.value = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapFrom.value)));
+  snapTo.value   = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapTo.value)));
+}
+snapFrom.addEventListener('change', ()=>{
+  const f = parseDateLocalISO(snapFrom.value);
+  const t = parseDateLocalISO(snapTo.value);
+  if (t && f > t) snapTo.value = snapFrom.value;
+  rebuildSnapshot();
+});
+snapTo.addEventListener('change', ()=>{
+  const f = parseDateLocalISO(snapFrom.value);
+  const t = parseDateLocalISO(snapTo.value);
+  if (f && t < f) snapFrom.value = snapTo.value;
+  rebuildSnapshot();
+});
+snapReset.addEventListener('click', ()=>{ syncSnapshotRangeToLabels({force:true}); rebuildSnapshot(); });
+syncSnapshotRangeToLabels({force:true});
 
 function gatherSnapshotBreakdown(){
   const includeC=snapConfirmed.checked, includeP=snapPotential.checked;
@@ -1150,8 +996,25 @@ function gatherSnapshotBreakdown(){
   const totalByProj = new Map();
   const byStatus=[]; // {label, status, hours}
 
+  const from = parseDateLocalISO(snapFrom.value);
+  const to   = parseDateLocalISO(snapTo.value);
+  const labels = currentLabels();
+
+  function periodBoundsForIndex(i){
+    const L = parseDateLocalISO(labels[i]);
+    const start = (currentPeriod==='weekly') ? mondayOf(L) : firstOfMonth(L);
+    const end   = (currentPeriod==='weekly') ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6) : lastOfMonth(L);
+    return {start, end};
+  }
+  function includeIndex(i){
+    if (!from || !to || isNaN(from) || isNaN(to)) return true;
+    const {start, end} = periodBoundsForIndex(i);
+    return !(end < from || start > to);
+  }
+
   function addSet(breakArr, status){
     for(let i=0;i<breakArr.length;i++){
+      if (!includeIndex(i)) continue;
       const rows=breakArr[i]||[];
       rows.forEach(r=>{
         const key=r.label||r.customer; const v=r.hours||0;
@@ -1191,7 +1054,7 @@ function rebuildSnapshot(){
   const topSet=new Set(top.map(p=>p[0]));
   const restSum=rest.reduce((a,[,v])=>a+v,0);
 
-  // Sankey (split nodes by status)
+  // Sankey: split by status for color
   const nodesMap=new Map();
   function addNode(name, color){ if(!nodesMap.has(name)) nodesMap.set(name, {name, itemStyle:{color}}); }
   const targetNode = deptName;
@@ -1233,7 +1096,7 @@ function rebuildSnapshot(){
     });
   }
 
-  // Treemap (Confirmed vs Potential)
+  // Treemap (group by Confirmed/Potential)
   const groups = [];
   const includeC = snapConfirmed.checked, includeP=snapPotential.checked;
 
@@ -1329,5 +1192,4 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-# Extra height to accommodate Scenario section + snapshots
-components.html(html_code, height=3000, scrolling=False)
+components.html(html_code, height=2600, scrolling=False)
