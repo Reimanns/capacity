@@ -990,12 +990,12 @@ snapReset.addEventListener('click', ()=>{ syncSnapshotRangeToLabels({force:true}
 syncSnapshotRangeToLabels({force:true});
 
 function gatherSnapshotBreakdown(){
-  const includeC=snapConfirmed.checked, includeP=snapPotential.checked;
-  const mapC=dataMap('c')[currentKey]?.breakdown||[];
-  const mapP=dataMap('p')[currentKey]?.breakdown||[];
+  const includeC = snapConfirmed.checked, includeP = snapPotential.checked;
+  const mapC = dataMap('c')[currentKey]?.breakdown || [];
+  const mapP = dataMap('p')[currentKey]?.breakdown || [];
 
   const totalByProj = new Map();
-  const byStatus=[]; // {label, status, hours}
+  const byStatus = [];
 
   const from = parseDateLocalISO(snapFrom.value);
   const to   = parseDateLocalISO(snapTo.value);
@@ -1004,9 +1004,55 @@ function gatherSnapshotBreakdown(){
   function periodBoundsForIndex(i){
     const L = parseDateLocalISO(labels[i]);
     const start = (currentPeriod==='weekly') ? mondayOf(L) : firstOfMonth(L);
-    const end   = (currentPeriod==='weekly') ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6) : lastOfMonth(L);
-    return {start, end};
+    const end   = (currentPeriod==='weekly')
+      ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6)
+      : lastOfMonth(L);
+    return { start, end };
   }
+  function periodWorkdays(start, end){
+    return workdaysInclusive(start, end); // uses your existing Mon–Fri counter
+  }
+  function fractionOfPeriodSelected(i){
+    if (!from || !to || isNaN(from) || isNaN(to)) return 1;
+    const { start, end } = periodBoundsForIndex(i);
+    if (end < from || start > to) return 0;
+    const ovStart = new Date(Math.max(start, from));
+    const ovEnd   = new Date(Math.min(end, to));
+    const denom = periodWorkdays(start, end);
+    const numer = periodWorkdays(ovStart, ovEnd);
+    return denom > 0 ? Math.min(1, Math.max(0, numer/denom)) : 0;
+  }
+  function addSet(breakArr, status){
+    for (let i = 0; i < breakArr.length; i++){
+      const frac = fractionOfPeriodSelected(i);
+      if (frac <= 0) continue;
+      const rows = breakArr[i] || [];
+      rows.forEach(r=>{
+        const key = r.label || r.customer;
+        const v = (r.hours || 0) * frac;   // prorate by overlap fraction
+        totalByProj.set(key, (totalByProj.get(key) || 0) + v);
+        byStatus.push({ label:key, status, hours:v });
+      });
+    }
+  }
+
+  if (includeC) addSet(mapC, 'confirmed');
+  if (includeP) addSet(mapP, 'potential');
+
+  const aggStatus = new Map();
+  byStatus.forEach(x=>{
+    const k = x.label + '|' + x.status;
+    aggStatus.set(k, (aggStatus.get(k)||0) + (x.hours||0));
+  });
+  const aggStatusRows = Array.from(aggStatus.entries()).map(([k,v])=>{
+    const [label,status] = k.split('|');
+    return { label, status, hours:v };
+  });
+
+  const total = Array.from(totalByProj.values()).reduce((a,b)=>a+b,0);
+  return { totalByProj:Object.fromEntries(totalByProj), byStatus:aggStatusRows, total };
+}
+
   function includeIndex(i){
     if (!from || !to || isNaN(from) || isNaN(to)) return true;
     const {start, end} = periodBoundsForIndex(i);
