@@ -216,7 +216,6 @@ html_template = """
       box-sizing: border-box;
     }
 
-    /* Keep labels consistent and stack nicely */
     .manual-hours label {
       font-size: 12px;
       display: flex;
@@ -224,13 +223,10 @@ html_template = """
       gap: 6px;
     }
 
-    /* Align bottoms of fields across the grid */
     .manual-grid,
     .manual-hours {
       align-items: end;
     }
-    
-    /* (Optional) unify number inputs across browsers */
     .manual-panel input[type="number"] {
       -moz-appearance: textfield;
       appearance: textfield;
@@ -240,7 +236,6 @@ html_template = """
       -webkit-appearance: none;
       margin: 0;
     }
-
 
     /* Snapshot breakdown */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
@@ -373,11 +368,21 @@ html_template = """
   <div class="snap-controls">
     <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
     <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
+
     <label>Top N projects
       <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
       <span id="snapTopNVal">8</span>
     </label>
-    <span class="snap-legend">
+
+    <label>From
+      <input type="date" id="snapFrom">
+    </label>
+    <label>To
+      <input type="date" id="snapTo">
+    </label>
+    <button id="snapReset" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;">Reset</button>
+
+    <span class="snap-legend" style="margin-left:auto">
       <span class="chip"><span class="dot" style="background:var(--confirmed)"></span> Confirmed</span>
       <span class="chip"><span class="dot" style="background:var(--potential2)"></span> Potential</span>
     </span>
@@ -793,6 +798,8 @@ function refreshDatasets(){
     utilChart.update();
   }
 
+  // keep snapshot date inputs in range whenever labels change
+  syncSnapshotRangeToLabels();
   rebuildSnapshot();
 }
 
@@ -937,7 +944,49 @@ snapConfirmed.addEventListener('change', rebuildSnapshot);
 snapPotential.addEventListener('change', rebuildSnapshot);
 snapTopN.addEventListener('input', ()=>{ snapTopNVal.textContent=snapTopN.value; rebuildSnapshot(); });
 
+const snapFrom = document.getElementById('snapFrom');
+const snapTo   = document.getElementById('snapTo');
+const snapReset = document.getElementById('snapReset');
+
 const keyColor={ confirmed:getComputedStyle(document.documentElement).getPropertyValue('--confirmed').trim()||'#2563eb', potential:getComputedStyle(document.documentElement).getPropertyValue('--potential2').trim()||'#059669' };
+
+// ---- snapshot date-range helpers ----
+function labelsMinMaxDates(){
+  const labels = currentLabels();
+  if (!labels.length) return {min:null, max:null};
+  const min = parseDateLocalISO(labels[0]);
+  const max = parseDateLocalISO(labels[labels.length - 1]);
+  return {min, max};
+}
+function clampDateToLabels(d){
+  const {min, max} = labelsMinMaxDates();
+  if (!min || !max || isNaN(d)) return d;
+  if (d < min) return min;
+  if (d > max) return max;
+  return d;
+}
+function syncSnapshotRangeToLabels({force=false} = {}){
+  const {min, max} = labelsMinMaxDates();
+  if (!min || !max) return;
+  if (force || !snapFrom.value) snapFrom.value = fmtDateInput(min);
+  if (force || !snapTo.value)   snapTo.value   = fmtDateInput(max);
+  snapFrom.value = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapFrom.value)));
+  snapTo.value   = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapTo.value)));
+}
+snapFrom.addEventListener('change', ()=>{
+  const f = parseDateLocalISO(snapFrom.value);
+  const t = parseDateLocalISO(snapTo.value);
+  if (t && f > t) snapTo.value = snapFrom.value;
+  rebuildSnapshot();
+});
+snapTo.addEventListener('change', ()=>{
+  const f = parseDateLocalISO(snapFrom.value);
+  const t = parseDateLocalISO(snapTo.value);
+  if (f && t < f) snapFrom.value = snapTo.value;
+  rebuildSnapshot();
+});
+snapReset.addEventListener('click', ()=>{ syncSnapshotRangeToLabels({force:true}); rebuildSnapshot(); });
+syncSnapshotRangeToLabels({force:true});
 
 function gatherSnapshotBreakdown(){
   const includeC=snapConfirmed.checked, includeP=snapPotential.checked;
@@ -947,8 +996,25 @@ function gatherSnapshotBreakdown(){
   const totalByProj = new Map();
   const byStatus=[]; // {label, status, hours}
 
+  const from = parseDateLocalISO(snapFrom.value);
+  const to   = parseDateLocalISO(snapTo.value);
+  const labels = currentLabels();
+
+  function periodBoundsForIndex(i){
+    const L = parseDateLocalISO(labels[i]);
+    const start = (currentPeriod==='weekly') ? mondayOf(L) : firstOfMonth(L);
+    const end   = (currentPeriod==='weekly') ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6) : lastOfMonth(L);
+    return {start, end};
+  }
+  function includeIndex(i){
+    if (!from || !to || isNaN(from) || isNaN(to)) return true;
+    const {start, end} = periodBoundsForIndex(i);
+    return !(end < from || start > to);
+  }
+
   function addSet(breakArr, status){
     for(let i=0;i<breakArr.length;i++){
+      if (!includeIndex(i)) continue;
       const rows=breakArr[i]||[];
       rows.forEach(r=>{
         const key=r.label||r.customer; const v=r.hours||0;
@@ -988,7 +1054,7 @@ function rebuildSnapshot(){
   const topSet=new Set(top.map(p=>p[0]));
   const restSum=rest.reduce((a,[,v])=>a+v,0);
 
-  // Sankey data (project nodes split by status for clear coloring)
+  // Sankey: split by status for color
   const nodesMap=new Map();
   function addNode(name, color){ if(!nodesMap.has(name)) nodesMap.set(name, {name, itemStyle:{color}}); }
   const targetNode = deptName;
@@ -1030,12 +1096,11 @@ function rebuildSnapshot(){
     });
   }
 
-  // Treemap data (group by status buckets)
+  // Treemap (group by Confirmed/Potential)
   const groups = [];
   const includeC = snapConfirmed.checked, includeP=snapPotential.checked;
 
   function buildChildren(status, color){
-    // build per-project values limited to topN; remainder as Other
     const valByProj=new Map();
     byStatus.filter(x=>x.status===status).forEach(x=>{
       const proj = topSet.has(x.label) ? x.label : 'Other';
@@ -1045,11 +1110,7 @@ function rebuildSnapshot(){
     const children=[];
     Array.from(valByProj.entries()).forEach(([label, v])=>{
       if(label==='Other' && v<=0) return;
-      children.push({
-        name: label,
-        value: +v,
-        itemStyle:{ color: color }
-      });
+      children.push({ name: label, value: +v, itemStyle:{ color: color } });
     });
     return children;
   }
@@ -1075,7 +1136,7 @@ function rebuildSnapshot(){
         data: groups,
         label:{ show:true, formatter:(p)=>{
           const v=+p.value||0; const pct= total>0 ? Math.round(v/total*100) : 0;
-          return `${p.name}\n${v.toFixed(0)} hrs • ${pct}%`;
+          return `${p.name}\\n${v.toFixed(0)} hrs • ${pct}%`;
         }}
       }]
     });
