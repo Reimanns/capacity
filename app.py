@@ -203,6 +203,45 @@ html_template = """
     .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
     .manual-hours { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(100px,1fr)); margin-top:10px; }
 
+    /* ——— Normalize manual "hours" inputs to match the rest ——— */
+    .manual-panel input,
+    .manual-panel select,
+    .manual-hours input {
+      font-size: 13px;          /* match impact-grid controls */
+      line-height: 1.25;
+      padding: 8px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Keep labels consistent and stack nicely */
+    .manual-hours label {
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Align bottoms of fields across the grid */
+    .manual-grid,
+    .manual-hours {
+      align-items: end;
+    }
+    
+    /* (Optional) unify number inputs across browsers */
+    .manual-panel input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    .manual-panel input[type="number"]::-webkit-outer-spin-button,
+    .manual-panel input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+
     /* Snapshot breakdown */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
     details.snapshot summary{ cursor:pointer; font-weight:600; }
