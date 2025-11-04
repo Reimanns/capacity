@@ -371,17 +371,28 @@ html_template = """
 <details class="snapshot" open>
   <summary>Snapshot Breakdown (Projects → Dept) &nbsp;—&nbsp; Compare alternatives</summary>
   <div class="snap-controls">
-    <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
-    <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
-    <label>Top N projects
-      <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
-      <span id="snapTopNVal">8</span>
-    </label>
-    <span class="snap-legend">
-      <span class="chip"><span class="dot" style="background:var(--confirmed)"></span> Confirmed</span>
-      <span class="chip"><span class="dot" style="background:var(--potential2)"></span> Potential</span>
-    </span>
-  </div>
+      <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
+      <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
+
+      <label>Top N projects
+        <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
+        <span id="snapTopNVal">8</span>
+      </label>
+
+      <label>From
+        <input type="date" id="snapFrom">
+      </label>
+      <label>To
+        <input type="date" id="snapTo">
+      </label>
+      <button id="snapReset" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;">Reset</button>
+    
+      <span class="snap-legend" style="margin-left:auto">
+        <span class="chip"><span class="dot" style="background:var(--confirmed)"></span> Confirmed</span>
+        <span class="chip"><span class="dot" style="background:var(--potential2)"></span> Potential</span>
+      </span>
+    </div>
+
   <div class="snap-grid">
     <div class="snap-card">
       <h4>Sankey: Project → Dept (by hours)</h4>
@@ -792,7 +803,7 @@ function refreshDatasets(){
     utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
     utilChart.update();
   }
-
+  syncSnapshotRangeToLabels();
   rebuildSnapshot();
 }
 
@@ -937,48 +948,124 @@ snapConfirmed.addEventListener('change', rebuildSnapshot);
 snapPotential.addEventListener('change', rebuildSnapshot);
 snapTopN.addEventListener('input', ()=>{ snapTopNVal.textContent=snapTopN.value; rebuildSnapshot(); });
 
+const snapFrom = document.getElementById('snapFrom');
+const snapTo   = document.getElementById('snapTo');
+const snapReset = document.getElementById('snapReset');
+
+function labelsMinMaxDates(){
+  const labels = currentLabels();
+  if (!labels.length) return {min:null, max:null};
+  const min = parseDateLocalISO(labels[0]);
+  const max = parseDateLocalISO(labels[labels.length - 1]);
+  return {min, max};
+}
+
+function clampDateToLabels(d){
+  const {min, max} = labelsMinMaxDates();
+  if (!min || !max || isNaN(d)) return d;
+  if (d < min) return min;
+  if (d > max) return max;
+  return d;
+}
+
+function fmtDateInput(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+
+function syncSnapshotRangeToLabels({force=false} = {}){
+  const {min, max} = labelsMinMaxDates();
+  if (!min || !max) return;
+  // If empty or force, reset to full-span
+  if (force || !snapFrom.value) snapFrom.value = fmtDateInput(min);
+  if (force || !snapTo.value)   snapTo.value   = fmtDateInput(max);
+  // Clamp if outside bounds
+  snapFrom.value = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapFrom.value)));
+  snapTo.value   = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapTo.value)));
+}
+
+snapFrom.addEventListener('change', ()=>{ 
+  // Ensure From <= To
+  const f = parseDateLocalISO(snapFrom.value);
+  const t = parseDateLocalISO(snapTo.value);
+  if (t && f > t) snapTo.value = snapFrom.value;
+  rebuildSnapshot();
+});
+snapTo.addEventListener('change', ()=>{
+  const f = parseDateLocalISO(snapFrom.value);
+  const t = parseDateLocalISO(snapTo.value);
+  if (f && t < f) snapFrom.value = snapTo.value;
+  rebuildSnapshot();
+});
+snapReset.addEventListener('click', ()=>{ syncSnapshotRangeToLabels({force:true}); rebuildSnapshot(); });
+
+// Call this once on load and also whenever period/labels change:
+syncSnapshotRangeToLabels({force:true});
+
+
 const keyColor={ confirmed:getComputedStyle(document.documentElement).getPropertyValue('--confirmed').trim()||'#2563eb', potential:getComputedStyle(document.documentElement).getPropertyValue('--potential2').trim()||'#059669' };
 
 function gatherSnapshotBreakdown(){
-  const includeC=snapConfirmed.checked, includeP=snapPotential.checked;
-  const mapC=dataMap('c')[currentKey]?.breakdown||[];
-  const mapP=dataMap('p')[currentKey]?.breakdown||[];
+  const includeC = snapConfirmed.checked;
+  const includeP = snapPotential.checked;
+
+  const mapC = dataMap('c')[currentKey]?.breakdown || [];
+  const mapP = dataMap('p')[currentKey]?.breakdown || [];
+
+  // Range from inputs (clamped earlier)
+  const from = parseDateLocalISO(snapFrom.value);
+  const to   = parseDateLocalISO(snapTo.value);
+
+  const labels = currentLabels();
 
   const totalByProj = new Map();
-  const byStatus=[]; // {label, status, hours}
+  const byStatus = []; // {label, status, hours}
+
+  function periodBoundsForIndex(i){
+    const L = parseDateLocalISO(labels[i]);
+    const start = (currentPeriod==='weekly') ? mondayOf(L) : firstOfMonth(L);
+    const end   = (currentPeriod==='weekly') ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6) : lastOfMonth(L);
+    return {start, end};
+  }
+
+  function includeIndex(i){
+    if (!from || !to || isNaN(from) || isNaN(to)) return true; // no filter
+    const {start, end} = periodBoundsForIndex(i);
+    return !(end < from || start > to); // any overlap
+  }
 
   function addSet(breakArr, status){
-    for(let i=0;i<breakArr.length;i++){
-      const rows=breakArr[i]||[];
+    for (let i = 0; i < breakArr.length; i++){
+      if (!includeIndex(i)) continue;
+      const rows = breakArr[i] || [];
       rows.forEach(r=>{
-        const key=r.label||r.customer; const v=r.hours||0;
-        totalByProj.set(key, (totalByProj.get(key)||0)+v);
+        const key = r.label || r.customer;
+        const v = r.hours || 0;
+        totalByProj.set(key, (totalByProj.get(key)||0) + v);
         byStatus.push({label:key, status, hours:v});
       });
     }
   }
-  if(includeC) addSet(mapC, 'confirmed');
-  if(includeP) addSet(mapP, 'potential');
 
-  const aggStatus=new Map();
-  byStatus.forEach(x=>{ const k=x.label+'|'+x.status; aggStatus.set(k, (aggStatus.get(k)||0)+(x.hours||0)); });
-  const aggStatusRows=Array.from(aggStatus.entries()).map(([k,v])=>{ const [label,status]=k.split('|'); return {label,status,hours:v}; });
+  if (includeC) addSet(mapC, 'confirmed');
+  if (includeP) addSet(mapP, 'potential');
 
-  const total=Array.from(totalByProj.values()).reduce((a,b)=>a+b,0);
-  return { totalByProj:Object.fromEntries(totalByProj), byStatus:aggStatusRows, total };
+  const total = Array.from(totalByProj.values()).reduce((a,b)=>a+b,0);
+
+  // Collapse duplicates by (label,status) for cleaner Sankey/Treemap inputs
+  const aggStatus = new Map();
+  byStatus.forEach(x=>{
+    const k = x.label + '|' + x.status;
+    aggStatus.set(k, (aggStatus.get(k)||0) + (x.hours||0));
+  });
+  const aggStatusRows = Array.from(aggStatus.entries()).map(([k,v])=>{
+    const [label,status] = k.split('|');
+    return {label, status, hours: v};
+  });
+
+  return { totalByProj: Object.fromEntries(totalByProj), byStatus: aggStatusRows, total };
 }
 
-function rebuildSnapshot(){
-  const sankeyDiv=document.getElementById('sankeyDiv');
-  const treemapDiv=document.getElementById('treemapDiv');
-  const paretoCtx=document.getElementById('paretoCanvas').getContext('2d');
-
-  if(sankeyE){ sankeyE.dispose(); sankeyE=null; }
-  if(treemapE){ treemapE.dispose(); treemapE=null; }
-  if(paretoChart){ paretoChart.destroy(); paretoChart=null; }
-
-  const deptName=(dataMap('c')[currentKey]?.name)||'Dept';
-  const { totalByProj, byStatus, total } = gatherSnapshotBreakdown();
 
   // Top N grouping
   const N=parseInt(snapTopN.value||'8',10);
