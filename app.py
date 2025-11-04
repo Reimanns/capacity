@@ -157,6 +157,7 @@ html_template = """
       --muted:#6b7280;
       --confirmed:#2563eb;
       --potential2:#059669;
+      --otline:#7c3aed;
     }
     html, body { height:100%; }
     body { font-family: Arial, sans-serif; margin: 8px 14px 24px; overflow-x:hidden; }
@@ -203,11 +204,11 @@ html_template = """
     .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
     .manual-hours { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(100px,1fr)); margin-top:10px; }
 
-    /* ——— Normalize manual "hours" inputs to match the rest ——— */
+    /* Normalize manual inputs */
     .manual-panel input,
     .manual-panel select,
     .manual-hours input {
-      font-size: 13px;          /* match impact-grid controls */
+      font-size: 13px;
       line-height: 1.25;
       padding: 8px 10px;
       border: 1px solid #e5e7eb;
@@ -215,29 +216,13 @@ html_template = """
       width: 100%;
       box-sizing: border-box;
     }
-
-    .manual-hours label {
-      font-size: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .manual-grid,
-    .manual-hours {
-      align-items: end;
-    }
-    .manual-panel input[type="number"] {
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
+    .manual-hours label { font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .manual-grid, .manual-hours { align-items: end; }
+    .manual-panel input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
     .manual-panel input[type="number"]::-webkit-outer-spin-button,
-    .manual-panel input[type="number"]::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
+    .manual-panel input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-    /* Snapshot breakdown */
+    /* Snapshot */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
     details.snapshot summary{ cursor:pointer; font-weight:600; }
     .snap-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0; }
@@ -248,7 +233,6 @@ html_template = """
     .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; }
     .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
     .snap-echart { width:100%; flex:1 1 auto; }
-
   </style>
 </head>
 <body>
@@ -312,6 +296,7 @@ html_template = """
     <label>Overtime (+% cap)
       <input id="impactOT" type="number" step="5" value="0">
     </label>
+    <label><input type="checkbox" id="impactPerOT"> Per-discipline OT</label>
     <label>Target util (%)
       <input id="impactTarget" type="number" step="5" value="100">
     </label>
@@ -325,6 +310,11 @@ html_template = """
 
     <button id="impactRun">Calculate Impact</button>
     <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
+  </div>
+
+  <!-- Per-discipline OT grid -->
+  <div class="impact-grid" id="otGrid" style="display:none;">
+    <!-- per-discipline OT% inputs injected here -->
   </div>
 
   <!-- Manual project details (shown only when source = Manual) -->
@@ -349,9 +339,7 @@ html_template = """
         <input id="m_del" type="date">
       </label>
     </div>
-    <div class="manual-hours" id="manualHours">
-      <!-- dept hours inputs injected here -->
-    </div>
+    <div class="manual-hours" id="manualHours"></div>
   </div>
 
   <div id="impactResult" class="impact-box"></div>
@@ -426,6 +414,11 @@ const departmentCapacities = __DEPTS__;
 
 let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
+
+// Track What-If state for OT overlay
+let whatIfActive = false;
+let lastWhatIfOTByKey = {}; // { key: otPctUsed }
+let lastWhatIfPeriod = 'weekly';
 
 // -------------------- Helpers --------------------
 function parseDateLocalISO(s){ if(!s) return new Date(NaN); const t=String(s).split('T')[0]; const [y,m,d]=t.split('-').map(Number); return new Date(y,(m||1)-1,d||1); }
@@ -623,6 +616,7 @@ let chart = new Chart(ctx,{
       { label: 'Utilization %', data: utilizationArray(currentPeriod, currentKey, showPotential),
         borderColor:'#374151', backgroundColor:'rgba(55,65,81,0.12)',
         yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0 }
+      // NOTE: OT overlay dataset will be injected dynamically when What-If runs
     ]
   },
   options:{
@@ -758,49 +752,50 @@ function updateKPIs(){
   const capUnit = currentPeriod==='weekly' ? `${capArr[0]?.toFixed(0)||0} hrs / wk` : `~${(capArr[0]||0).toFixed(0)} hrs / mo (workdays)`;
   document.getElementById('weeklyCap').textContent = capUnit;
 }
-function refreshDatasets(){
-  const labels = currentLabels();
-  chart.data.labels = labels;
 
-  const deptName = (dataMap('c')[currentKey]?.name)||'Dept';
-  chart.data.datasets[0].label = `${deptName} Load (hrs)`;
-  chart.data.datasets[0].data  = (dataMap('c')[currentKey]?.series)||[];
-  chart.data.datasets[1].label = `${deptName} Capacity (hrs)`;
-  chart.data.datasets[1].data  = capacityArray(currentKey, labels, currentPeriod);
-  chart.data.datasets[2].label = `${deptName} Potential (hrs)`;
-  chart.data.datasets[2].data  = (dataMap('p')[currentKey]?.series)||[];
-  chart.data.datasets[3].label = `${deptName} Actual (hrs)`;
-  chart.data.datasets[3].data  = (dataMap('a')[currentKey]?.series)||[];
-  chart.data.datasets[2].hidden = !showPotential;
-  chart.data.datasets[3].hidden = !showActual;
-
-  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
-
-  const monthly = currentPeriod==='monthly';
-  chart.data.datasets.forEach((ds, i)=>{ ds.tension = monthly ? 0 : 0.1; if(i===1){ ds.stepped = monthly ? true : false; } });
-  chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
-  chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
-
-  chart.options.plugins.annotation.annotations.todayLine.xMin = monthly ? monthTodayLabel : weekTodayLabel;
-  chart.options.plugins.annotation.annotations.todayLine.xMax = monthly ? monthTodayLabel : weekTodayLabel;
-
-  chart.update();
-  updateKPIs();
-
-  if (utilChart) {
-    utilChart.data.labels = currentLabels();
-    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showPotential);
-    utilChart.options.scales.x.title.text = (currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting');
-    const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
-    utilChart.options.plugins.annotation.annotations.todayLine.xMin = todayX;
-    utilChart.options.plugins.annotation.annotations.todayLine.xMax = todayX;
-    utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
-    utilChart.update();
+// ---- OT Overlay helpers ----
+function getOT(key){
+  if (impactPerOT && impactPerOT.checked) {
+    const el = document.getElementById('ot_' + key);
+    return Math.max(0, parseFloat(el?.value || '0') || 0);
   }
+  return Math.max(0, parseFloat(impactOT.value || '0') || 0);
+}
+function capPerDay(key){
+  const otPct = getOT(key);
+  const dept = departmentCapacities.find(x=>x.key===key);
+  const perWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
+  const uplift = 1 + (otPct/100);
+  return (perWeek * uplift) / 5.0;
+}
+function capacityArrayWithDeptOT(key, labels, period, explicitOTPct=null){
+  const base = capacityArray(key, labels, period);
+  const otPct = explicitOTPct!=null ? explicitOTPct : getOT(key);
+  const uplift = 1 + (otPct/100);
+  return base.map(v => v * uplift);
+}
 
-  // keep snapshot date inputs in range whenever labels change
-  syncSnapshotRangeToLabels();
-  rebuildSnapshot();
+// Sum headroom with discipline-specific OT uplift
+function baselineSeries(period, key){ const mapC=(period==='weekly')?dataWConfirmed:dataMConfirmed; return (mapC[key]?.series||[]).slice(); }
+function periodRange(period, labels, start, end){
+  let s=-1, e=-1;
+  for(let i=0;i<labels.length;i++){
+    const L=parseDateLocalISO(labels[i]);
+    const Pstart=(period==='weekly')?mondayOf(L):firstOfMonth(L);
+    const Pend=(period==='weekly')?new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6):lastOfMonth(L);
+    if(s===-1 && Pend>=start) s=i;
+    if(Pstart<=end) e=i;
+  }
+  if(s===-1 || e===-1 || e<s) return null; return {s,e};
+}
+function sumHeadroom(period, key, start, end){
+  const labels=(period==='weekly')?weekLabels:monthLabels;
+  const cap=capacityArrayWithDeptOT(key, labels, period);
+  const base=baselineSeries(period, key);
+  const rng=periodRange(period, labels, start, end);
+  if(!rng) return 0; let sum=0;
+  for(let i=rng.s;i<=rng.e;i++){ sum += Math.max(0, (cap[i]||0) - (base[i]||0)); }
+  return sum;
 }
 
 // -------------------- Popover --------------------
@@ -821,6 +816,7 @@ const impactProjWrap = document.getElementById('impactProjWrap');
 const impactMult = document.getElementById('impactMult');
 const impactLead = document.getElementById('impactLead');
 const impactOT = document.getElementById('impactOT');
+const impactPerOT = document.getElementById('impactPerOT');
 const impactTarget = document.getElementById('impactTarget');
 const impactInd = document.getElementById('impactInd');
 const impactDel = document.getElementById('impactDel');
@@ -830,6 +826,7 @@ const impactResult = document.getElementById('impactResult');
 
 const manualPanel = document.getElementById('manualPanel');
 const manualHours = document.getElementById('manualHours');
+const otGrid = document.getElementById('otGrid');
 
 function fmtDateInput(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
 function addWorkdays(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1 && dow<=5) left--; } return t; }
@@ -858,26 +855,24 @@ function setImpactProjects(){
   }
 }
 impactSource.addEventListener('change', setImpactProjects);
-(function initManualHours(){ let html=""; departmentCapacities.forEach(d=>{ html += `<label>${d.name} hours<input id="mh_${d.key}" type="number" step="1" value="0"></label>`; }); manualHours.innerHTML=html; document.getElementById('m_ind').value=fmtDateInput(new Date()); document.getElementById('m_del').value=fmtDateInput(addWorkdays(new Date(),10)); })();
-impactProjectSel.addEventListener('change', ()=>{ const arr=impactSourceProjects(); const p=arr[Number(impactProjectSel.value)||0]; if(!p) return; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); });
+(function initManualHours(){
+  let html=""; departmentCapacities.forEach(d=>{ html += `<label>${d.name} hours<input id="mh_${d.key}" type="number" step="1" value="0"></label>`; });
+  manualHours.innerHTML=html; document.getElementById('m_ind').value=fmtDateInput(new Date()); document.getElementById('m_del').value=fmtDateInput(addWorkdays(new Date(),10));
+})();
+(function initPerDisciplineOT(){
+  let html = "";
+  departmentCapacities.forEach(d=>{
+    html += `<label>${d.name} OT %<input id="ot_${d.key}" type="number" step="5" value="0"></label>`;
+  });
+  otGrid.innerHTML = html;
+})();
+impactPerOT.addEventListener('change', ()=>{
+  otGrid.style.display = impactPerOT.checked ? 'grid' : 'none';
+});
+const impactProject = document.getElementById('impactProject');
+impactProject.addEventListener('change', ()=>{ const arr=impactSourceProjects(); const p=arr[Number(impactProject.value)||0]; if(!p) return; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); });
 setImpactProjects();
 
-function capPerDay(key, otPct){ const dept=departmentCapacities.find(x=>x.key===key); const perWeek=(dept?.headcount||0)*HOURS_PER_FTE*PRODUCTIVITY_FACTOR; const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; return (perWeek*uplift)/5.0; }
-function baselineSeries(period, key){ const mapC=(period==='weekly')?dataWConfirmed:dataMConfirmed; return (mapC[key]?.series||[]).slice(); }
-function periodRange(period, labels, start, end){
-  let s=-1, e=-1;
-  for(let i=0;i<labels.length;i++){
-    const L=parseDateLocalISO(labels[i]);
-    const Pstart=(period==='weekly')?mondayOf(L):firstOfMonth(L);
-    const Pend=(period==='weekly')?new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6):lastOfMonth(L);
-    if(s===-1 && Pend>=start) s=i;
-    if(Pstart<=end) e=i;
-  }
-  if(s===-1 || e===-1 || e<s) return null; return {s,e};
-}
-function sumHeadroom(period, key, start, end, otPct){
-  const labels=(period==='weekly')?weekLabels:monthLabels; const cap=capacityArray(key, labels, period); const base=baselineSeries(period, key); const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; const rng=periodRange(period, labels, start, end); if(!rng) return 0; let sum=0; for(let i=rng.s;i<=rng.e;i++){ const hr=Math.max(0, cap[i]*uplift - (base[i]||0)); sum += hr; } return sum;
-}
 function renderImpactResult(obj){
   const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
   const dfmt=d=>{ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; };
@@ -887,10 +882,11 @@ function renderImpactResult(obj){
     <div><strong>Requested delivery:</strong> ${dfmt(targetEnd)}</div>
     <div><strong>New delivery (what-if):</strong> ${dfmt(newEnd)} <em>${slipDays>0?`(+${slipDays} workdays)`:''}</em></div>
     <table class="impact-table">
-      <thead><tr><th>Department</th><th>Proj Hours</th><th>Headroom</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
+      <thead><tr><th>Department</th><th>OT %</th><th>Proj Hours</th><th>Headroom</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
       <tbody>
         ${rows.map(r=>`<tr>
           <td>${r.name}</td>
+          <td>${r.ot.toFixed(0)}%</td>
           <td>${r.h.toFixed(0)}</td>
           <td>${r.head.toFixed(0)}</td>
           <td style="color:${r.short>0?'#b91c1c':'#065f46'};">${r.short>0?(''+r.short.toFixed(0)):'0'}</td>
@@ -907,32 +903,97 @@ function renderImpactResult(obj){
   chart.options.plugins.annotation.annotations.whatIfEnd   = { type:'line', xMin:endLbl,   xMax:endLbl,   borderColor:'#7c3aed', borderWidth:2, label:{display:true, content:'What-If End',   position:'end',   backgroundColor:'rgba(124,58,237,0.1)', color:'#7c3aed'} };
   chart.update();
 }
-impactRun.addEventListener('click', ()=>{
+
+// ---- Add/Update OT Overlay line ----
+function ensureOTOverlayDataset(){
+  const idx = chart.data.datasets.findIndex(ds => ds._otOverlay === true);
+  if (idx !== -1) return idx;
+  chart.data.datasets.push({
+    _otOverlay: true,
+    label: 'Capacity + OT (What-If)',
+    data: [],
+    borderColor: getComputedStyle(document.documentElement).getPropertyValue('--otline').trim(),
+    backgroundColor: 'rgba(124,58,237,0.08)',
+    borderWidth: 2,
+    fill: false,
+    tension: (currentPeriod==='monthly') ? 0 : 0.1,
+    borderDash: [8,4],
+    pointRadius: 0,
+  });
+  return chart.data.datasets.length - 1;
+}
+function removeOTOverlayDataset(){
+  const idx = chart.data.datasets.findIndex(ds => ds._otOverlay === true);
+  if (idx !== -1) {
+    chart.data.datasets.splice(idx, 1);
+  }
+}
+function updateOTOverlay(){
+  if (!whatIfActive) { removeOTOverlayDataset(); chart.update(); return; }
+  const otPct = lastWhatIfOTByKey[currentKey] || 0;
+  const labels = currentLabels();
+  const series = capacityArrayWithDeptOT(currentKey, labels, currentPeriod, otPct);
+  const idx = ensureOTOverlayDataset();
+  // keep overlay aligned with monthly/weekly curve style
+  chart.data.datasets[idx].tension = (currentPeriod==='monthly') ? 0 : 0.1;
+  chart.data.datasets[idx].data = series;
+  chart.update();
+}
+
+function computeWhatIf(){
   const arr = impactSourceProjects();
-  const idx = (impactSource.value==='manual') ? 0 : (Number(impactProjectSel.value)||0);
-  const proj = arr[idx]; if(!proj){ impactResult.textContent="No project selected."; return; }
+  const idx = (impactSource.value==='manual') ? 0 : (Number(impactProject.value)||0);
+  const proj = arr[idx]; if(!proj){ impactResult.textContent="No project selected."; return null; }
 
   const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
   const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
-  const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
 
   const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
   const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
-  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){ impactResult.textContent="Invalid induction/delivery dates."; return; }
+  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){ impactResult.textContent="Invalid induction/delivery dates."; return null; }
 
   const today = new Date(); const leadReady = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(today, minLead);
   const earliestStart = (rawStart>leadReady)?rawStart:leadReady;
   const targetStart = rawStart, targetEnd = rawEnd;
 
-  const rows=[]; let overallSlip=0;
+  const rows=[]; let overallSlip=0; const otMap={};
   departmentCapacities.forEach(d=>{
-    const key=d.key, name=d.name; const capDay=capPerDay(key, otPct); const H=(proj[key]||0)*mult; const head=sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct); const short=Math.max(0, H-head); const slip=(short>0 && capDay>0)?Math.ceil(short/capDay):0; overallSlip=Math.max(overallSlip, slip); rows.push({name,h:H,head,short,slip});
+    const key = d.key, name = d.name;
+    const otUsed = getOT(key);
+    const capDay = capPerDay(key);
+    const H = (proj[key] || 0) * mult;
+    const head = sumHeadroom(currentPeriod, key, earliestStart, targetEnd);
+    const short = Math.max(0, H - head);
+    const slip = (short > 0 && capDay > 0) ? Math.ceil(short / capDay) : 0;
+    overallSlip = Math.max(overallSlip, slip);
+    rows.push({ name, ot: otUsed, h: H, head, short, slip });
+    otMap[key] = otUsed;
   });
   const newEnd = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(targetEnd, overallSlip);
 
-  renderImpactResult({ earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows });
+  return { earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows, otMap };
+}
+
+document.getElementById('impactRun').addEventListener('click', ()=>{
+  const res = computeWhatIf(); if(!res) return;
+  // store OT map and activate overlay
+  lastWhatIfOTByKey = res.otMap || {};
+  whatIfActive = true;
+  lastWhatIfPeriod = currentPeriod;
+  renderImpactResult(res);
+  updateOTOverlay();
 });
-impactClear.addEventListener('click', ()=>{ impactResult.innerHTML=""; if(chart?.options?.plugins?.annotation?.annotations){ delete chart.options.plugins.annotation.annotations.whatIfStart; delete chart.options.plugins.annotation.annotations.whatIfEnd; chart.update(); } });
+impactClear.addEventListener('click', ()=>{
+  impactResult.innerHTML="";
+  if(chart?.options?.plugins?.annotation?.annotations){
+    delete chart.options.plugins.annotation.annotations.whatIfStart;
+    delete chart.options.plugins.annotation.annotations.whatIfEnd;
+  }
+  whatIfActive = false;
+  lastWhatIfOTByKey = {};
+  removeOTOverlayDataset();
+  chart.update();
+});
 
 // -------------------- Snapshot (ECharts Sankey + Treemap, Chart.js Pareto) --------------------
 let sankeyE=null, treemapE=null, paretoChart=null;
@@ -950,7 +1011,7 @@ const snapReset = document.getElementById('snapReset');
 
 const keyColor={ confirmed:getComputedStyle(document.documentElement).getPropertyValue('--confirmed').trim()||'#2563eb', potential:getComputedStyle(document.documentElement).getPropertyValue('--potential2').trim()||'#059669' };
 
-// ---- snapshot date-range helpers ----
+// snapshot range helpers
 function labelsMinMaxDates(){
   const labels = currentLabels();
   if (!labels.length) return {min:null, max:null};
@@ -1054,7 +1115,7 @@ function rebuildSnapshot(){
   const topSet=new Set(top.map(p=>p[0]));
   const restSum=rest.reduce((a,[,v])=>a+v,0);
 
-  // Sankey: split by status for color
+  // Sankey
   const nodesMap=new Map();
   function addNode(name, color){ if(!nodesMap.has(name)) nodesMap.set(name, {name, itemStyle:{color}}); }
   const targetNode = deptName;
@@ -1096,7 +1157,7 @@ function rebuildSnapshot(){
     });
   }
 
-  // Treemap (group by Confirmed/Potential)
+  // Treemap
   const groups = [];
   const includeC = snapConfirmed.checked, includeP=snapPotential.checked;
 
@@ -1142,7 +1203,7 @@ function rebuildSnapshot(){
     });
   }
 
-  // Pareto (Chart.js)
+  // Pareto
   const pairsAll=Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
   const labels=pairsAll.map(p=>p[0]);
   const vals=pairsAll.map(p=>p[1]);
@@ -1174,6 +1235,47 @@ prodSlider.addEventListener('input', e=>{ PRODUCTIVITY_FACTOR=parseFloat(e.targe
 hoursInput.addEventListener('change', e=>{ const v=parseInt(e.target.value||'40',10); HOURS_PER_FTE=isNaN(v)?40:Math.min(60,Math.max(30,v)); e.target.value=HOURS_PER_FTE; refreshDatasets(); });
 periodSel.addEventListener('change', e=>{ currentPeriod=e.target.value; refreshDatasets(); });
 utilSepChk.addEventListener('change', e=>{ utilSeparate=e.target.checked; rebuildUtilChart(); });
+
+// ---------- Refresh (now aware of OT overlay) ----------
+function refreshDatasets(){
+  const labels = currentLabels();
+  chart.data.labels = labels;
+
+  const deptName = (dataMap('c')[currentKey]?.name)||'Dept';
+  chart.data.datasets[0].label = `${deptName} Load (hrs)`;
+  chart.data.datasets[0].data  = (dataMap('c')[currentKey]?.series)||[];
+  chart.data.datasets[1].label = `${deptName} Capacity (hrs)`;
+  chart.data.datasets[1].data  = capacityArray(currentKey, labels, currentPeriod);
+  chart.data.datasets[2].label = `${deptName} Potential (hrs)`;
+  chart.data.datasets[2].data  = (dataMap('p')[currentKey]?.series)||[];
+  chart.data.datasets[3].label = `${deptName} Actual (hrs)`;
+  chart.data.datasets[3].data  = (dataMap('a')[currentKey]?.series)||[];
+  chart.data.datasets[2].hidden = !showPotential;
+  chart.data.datasets[3].hidden = !showActual;
+
+  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
+
+  const monthly = currentPeriod==='monthly';
+  chart.data.datasets.forEach((ds, i)=>{
+    ds.tension = monthly ? 0 : 0.1;
+    if(i===1){ ds.stepped = monthly ? true : false; }
+  });
+  chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
+  chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
+
+  chart.options.plugins.annotation.annotations.todayLine.xMin = monthly ? monthTodayLabel : weekTodayLabel;
+  chart.options.plugins.annotation.annotations.todayLine.xMax = monthly ? monthTodayLabel : weekTodayLabel;
+
+  chart.update();
+  updateKPIs();
+
+  // Update OT overlay if a what-if is active
+  updateOTOverlay();
+
+  // keep snapshot date inputs in range whenever labels change
+  syncSnapshotRangeToLabels();
+  rebuildSnapshot();
+}
 
 // ---------- Initial render ----------
 refreshDatasets();
