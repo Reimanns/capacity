@@ -139,6 +139,9 @@ html_template = """
   <title>Labor Capacity Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+  <!-- Sankey & Treemap plugins -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2"></script>
   <style>
     :root{
       --brand:#003366; --brand-20: rgba(0,51,102,0.2);
@@ -158,10 +161,9 @@ html_template = """
     .metric .value { font-weight:700; font-size:18px; }
     .chart-wrap { width:100%; height:720px; margin-bottom: 8px; position:relative; }
     .chart-wrap.util { height:380px; margin-top: 8px; }
-    .chart-wrap.sand { height:420px; margin-top: 6px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
-    /* Anchored popover */
+    /* Anchored popover for drilldown */
     .popover {
       display:none; position:fixed; z-index:9999; max-width:min(92vw, 900px);
       background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.2);
@@ -184,34 +186,27 @@ html_template = """
     .impact-table{ width:100%; border-collapse:collapse; margin-top:6px; }
     .impact-table th,.impact-table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:left; }
 
-    .inline-actions { display:flex; gap:10px; align-items:center; }
-    .ghost { background:#fff; color:#111827; border:1px solid #e5e7eb; }
-
     details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
     details.impact summary{ cursor:pointer; font-weight:600; }
 
-    /* Manual What-If box */
-    .manual-box{ display:none; border:1px dashed #d1d5db; border-radius:10px; padding:10px; background:#fff; }
-    .manual-grid{ display:grid; gap:8px; grid-template-columns: repeat(4, minmax(120px,1fr)); }
-    .manual-grid label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
-    /* Sand legend + chips */
-    #sandLegend { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 2px; }
-    .legend-chip {
-      display:flex; align-items:center; gap:8px; padding:6px 10px;
-      border:1px solid #e5e7eb; border-radius:999px; font-size:12px; cursor:pointer;
-      background:#fff;
-    }
-    .legend-swatch { width:12px; height:12px; border-radius:3px; border:1px solid rgba(0,0,0,0.1); }
-    .legend-chip.dim { opacity:0.35; }
-    .legend-chip .pct { color:#6b7280; }
+    /* Manual project (appears only when Manual is selected) */
+    .manual-wrap { border:1px dashed #e5e7eb; border-radius:10px; padding:10px; background:#fff; margin-top:8px; display:none; }
+    .manual-grid { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(110px,1fr)); }
+    .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
+    .manual-hours { display:grid; gap:6px; grid-template-columns: repeat(6, minmax(110px,1fr)); margin-top:6px; }
 
-    /* Right-edge label backdrop */
-    .label-outline {
-      paint-order: stroke fill;
-      stroke: #fff; stroke-width: 6px;
-    }
-
-    
+    /* Snapshot section */
+    details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:12px 0 10px; }
+    details.snapshot summary{ cursor:pointer; font-weight:600; }
+    .snap-controls { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:8px 0 10px; }
+    .snap-controls label{ font-size:12px; display:flex; align-items:center; gap:6px; }
+    .snap-grid { display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px; align-items:stretch; }
+    .snap-grid .right { display:grid; grid-template-rows: 1fr 1fr; gap:12px; }
+    .canvas-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:8px; height:100%; }
+    .canvas-card h4 { margin:4px 6px 8px; font-size:14px; color:#374151; }
+    .legend { display:flex; gap:14px; align-items:center; margin: 0 0 6px 6px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; }
+    .swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }
   </style>
 </head>
 <body>
@@ -222,14 +217,13 @@ html_template = """
   <label for="disciplineSelect"><strong>Discipline:</strong></label>
   <select id="disciplineSelect"></select>
 
-  <label><input type="checkbox" id="showConfirmed" checked> Show Confirmed</label>
   <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
   <label><input type="checkbox" id="showActual"> Show Actual</label>
 
   <label><strong>Timeline:</strong>
     <select id="periodSel">
       <option value="weekly" selected>Weekly</option>
-      <option value="monthly">Monthly (workdays)</option>
+      <option value="monthly">Monthly</option>
     </select>
   </label>
 
@@ -285,29 +279,14 @@ html_template = """
       <input type="date" id="impactDel">
     </label>
 
-    <div class="inline-actions" style="grid-column: span 2;">
-      <button id="impactRun">Calculate Impact</button>
-      <button id="impactClear" class="ghost">Clear What-If</button>
-    </div>
+    <button id="impactRun">Calculate Impact</button>
+    <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
   </div>
 
-  <!-- Manual project inputs (hidden unless manual source chosen) -->
-  <div id="manualBox" class="manual-box">
-    <div class="manual-grid" id="manualFixed">
-      <label>Manual Project #
-        <input id="mNum" type="text" placeholder="PXXXX" />
-      </label>
-      <label>Customer
-        <input id="mCust" type="text" placeholder="Customer" />
-      </label>
-      <label>Induction
-        <input id="mInd" type="date" />
-      </label>
-      <label>Delivery
-        <input id="mDel" type="date" />
-      </label>
-    </div>
-    <div class="manual-grid" id="manualHours" style="margin-top:8px;"></div>
+  <!-- Manual project fields (hidden unless Manual is selected) -->
+  <div id="manualWrap" class="manual-wrap">
+    <div class="manual-grid" id="manualTop"></div>
+    <div class="manual-hours" id="manualHours"></div>
   </div>
 
   <div id="impactResult" class="impact-box"></div>
@@ -315,17 +294,41 @@ html_template = """
 
 <div class="chart-wrap"><canvas id="myChart"></canvas></div>
 <div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
-<div class="controls" id="sandControls" style="margin-top:6px;">
-  <label><strong>Project focus:</strong>
-    <select id="sandFocus"></select>
-  </label>
-  <label><input type="checkbox" id="sandLabels" checked> Show right-edge labels</label>
-</div>
-<div id="sandLegend"></div>
-<div class="chart-wrap sand"><canvas id="sandChart"></canvas></div>
-
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
+
+<!-- Snapshot breakdown (Sankey + Treemap + Pareto) -->
+<details class="snapshot">
+  <summary>Snapshot Breakdown (Sankey / Treemap / Pareto)</summary>
+  <div class="snap-controls">
+    <div class="legend">
+      <span class="chip"><span class="swatch" style="background:var(--brand);"></span> Confirmed</span>
+      <span class="chip"><span class="swatch" style="background:var(--potential);"></span> Potential</span>
+    </div>
+    <label><input type="checkbox" id="snapConfirm" checked> Include Confirmed</label>
+    <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
+    <label><strong>Snapshot period:</strong>
+      <input type="range" id="snapIdx" min="0" max="0" step="1" value="0">
+      <span id="snapLabel">—</span>
+    </label>
+  </div>
+  <div class="snap-grid">
+    <div class="canvas-card">
+      <h4>Sankey: Projects → Discipline</h4>
+      <canvas id="sankeyCanvas" style="height:520px;"></canvas>
+    </div>
+    <div class="right">
+      <div class="canvas-card">
+        <h4>Treemap: Project share</h4>
+        <canvas id="treemapCanvas" style="height:250px;"></canvas>
+      </div>
+      <div class="canvas-card">
+        <h4>Pareto: Top contributors</h4>
+        <canvas id="paretoCanvas" style="height:250px;"></canvas>
+      </div>
+    </div>
+  </div>
+</details>
 
 <!-- Anchored popover -->
 <div class="popover" id="drillPopover" role="dialog" aria-modal="true" aria-labelledby="popTitle">
@@ -512,7 +515,6 @@ sel.value=departmentCapacities[0]?.key || "";
 const prodSlider = document.getElementById('prodFactor');
 const prodVal = document.getElementById('prodVal');
 const hoursInput = document.getElementById('hoursPerFTE');
-const chkConf = document.getElementById('showConfirmed');
 const chkPot = document.getElementById('showPotential');
 const chkAct = document.getElementById('showActual');
 const periodSel = document.getElementById('periodSel');
@@ -529,18 +531,14 @@ function capacityArray(key, labels, period){
     return (capPerWeek / 5) * wd;  // scale by workdays in that month
   });
 }
-function zeros(n){ return new Array(n).fill(0); }
-function utilizationArray(period, key, includeConfirmed, includePotential){
+function utilizationArray(period, key, includePotential){
   const mapC = (period==='weekly') ? dataWConfirmed : dataMConfirmed;
   const mapP = (period==='weekly') ? dataWPotential : dataMPotential;
   const labels = (period==='weekly') ? weekLabels : monthLabels;
   const conf = mapC[key]?.series || [];
   const pot  = mapP[key]?.series || [];
   const cap  = capacityArray(key, labels, period);
-  return cap.map((c,i)=>{
-    const load = (includeConfirmed ? (conf[i]||0) : 0) + (includePotential ? (pot[i]||0) : 0);
-    return c ? (100*load/c) : 0;
-  });
+  return conf.map((v,i)=>{ const load = includePotential ? v + (pot[i]||0) : v; return cap[i] ? (100*load/cap[i]) : 0; });
 }
 
 const weekTodayLabel = ymd(mondayOf(new Date()));
@@ -553,7 +551,6 @@ const annos = { annotations:{ todayLine:{ type:'line', xMin: weekTodayLabel, xMa
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
 let currentPeriod = 'weekly';
-let showConfirmed = true;
 let showPotential = true;
 let showActual = false;
 let utilSeparate = true;
@@ -576,7 +573,7 @@ let chart = new Chart(ctx,{
       { label: ((dataMap('c')[currentKey]?.name)||'Dept') + ' Load (hrs)', data: (dataMap('c')[currentKey]?.series)||[],
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--brand-20').trim(),
-        borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showConfirmed },
+        borderWidth:2, fill:true, tension:0.1, pointRadius:0 },
       { label: ((dataMap('c')[currentKey]?.name)||'Dept') + ' Capacity (hrs)', data: capacityArray(currentKey, currentLabels(), currentPeriod),
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity-20').trim(),
@@ -589,7 +586,7 @@ let chart = new Chart(ctx,{
         borderColor: getComputedStyle(document.documentElement).getPropertyValue('--actual').trim(),
         backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--actual-20').trim(),
         borderWidth:2, fill:true, tension:0.1, pointRadius:0, hidden: !showActual },
-      { label: 'Utilization %', data: utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential),
+      { label: 'Utilization %', data: utilizationArray(currentPeriod, currentKey, showPotential),
         borderColor:'#374151', backgroundColor:'rgba(55,65,81,0.12)',
         yAxisID:'y2', borderWidth:1.5, fill:false, tension:0.1, pointRadius:0 }
     ]
@@ -646,6 +643,13 @@ let chart = new Chart(ctx,{
       const cy = (native?.clientY ?? 200);
       if(combined) openPopoverCombined(title, rows, cx, cy);
       else openPopoverSingle(title, rows, cx, cy);
+
+      // Also sync snapshot slider to this index for quick comparison
+      try {
+        document.getElementById('snapIdx').value = String(idx);
+        updateSnapshotUI();
+        rebuildSnapshot();
+      } catch(e){}
     }
   }
 });
@@ -660,7 +664,7 @@ function createUtilChart(){
       labels: currentLabels(),
       datasets: [{
         label: 'Utilization %',
-        data: utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential),
+        data: utilizationArray(currentPeriod, currentKey, showPotential),
         borderColor: '#111827',
         backgroundColor: 'rgba(17,24,39,0.10)',
         borderWidth: 2,
@@ -728,296 +732,13 @@ function rebuildUtilChart(){
   chart.update();
 }
 
-// ---------- SAND CHART (stacked per-project) with stable colors, focus, labels, legend ----------
-let sandChart = null;
-let sandFocusLabel = "";   // currently focused project (highlighted)
-const sandFocusSel = document.getElementById('sandFocus');
-const sandLabelsChk = document.getElementById('sandLabels');
-const sandLegendDiv = document.getElementById('sandLegend');
-
-// Stable color per project label
-function strHash(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
-function colorFor(label, alpha=1){
-  const h = strHash(label);
-  const hue = (h % 360);
-  return `hsla(${hue}, 65%, 52%, ${alpha})`;
-}
-function truncate(s, n){ return (s.length<=n) ? s : (s.slice(0, n-1) + '…'); }
-function sumArrays(a,b){ const n=Math.max(a.length,b.length), out=new Array(n).fill(0); for(let i=0;i<n;i++) out[i]=(a[i]||0)+(b[i]||0); return out; }
-
-// Per-project series
-function perProjectWeekly(arr, key, labels){
-  const out = [];
-  for(const p of arr){
-    const hrs = p[key]||0; if(!hrs) continue;
-    const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
-    if(isNaN(a) || isNaN(b) || b<a) continue;
-    const data = new Array(labels.length).fill(0);
-    let s=-1,e=-1;
-    for(let i=0;i<labels.length;i++){
-      const L=parseDateLocalISO(labels[i]);
-      if(L>=a && s===-1) s=i;
-      if(L<=b) e=i;
-    }
-    if(s!==-1 && e!==-1 && e>=s){
-      const n=e-s+1, per=hrs/n;
-      for(let i=s;i<=e;i++) data[i]+=per;
-      const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
-      out.push({ label, data, total: hrs });
-    }
-  }
-  return out;
-}
-function perProjectMonthly(arr, key, labels){
-  const out = [];
-  for(const p of arr){
-    const hrs = p[key]||0; if(!hrs) continue;
-    const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
-    if(isNaN(a) || isNaN(b) || b<a) continue;
-    const projWD = Math.max(1, workdaysInclusive(a,b));
-    const data = new Array(labels.length).fill(0);
-    for(let i=0;i<labels.length;i++){
-      const mStart = parseDateLocalISO(labels[i]);
-      const mEnd   = lastOfMonth(mStart);
-      const ovS = new Date(Math.max(mStart, a));
-      const ovE = new Date(Math.min(mEnd, b));
-      if(ovE >= ovS){
-        const monWD = workdaysInclusive(ovS, ovE);
-        data[i] += hrs * (monWD / projWD);
-      }
-    }
-    const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
-    out.push({ label, data, total: hrs });
-  }
-  return out;
-}
-function mergeProjectLists(A, B){
-  const map = new Map();
-  A.forEach(x => map.set(x.label, { label:x.label, data:x.data.slice(), total:x.total }));
-  B.forEach(x => {
-    if(map.has(x.label)){
-      const cur = map.get(x.label);
-      cur.data = sumArrays(cur.data, x.data);
-      cur.total += x.total;
-    } else {
-      map.set(x.label, { label:x.label, data:x.data.slice(), total:x.total });
-    }
-  });
-  return Array.from(map.values());
-}
-
-// Right-edge labels plugin (avoids the legend hunt)
-const rightEdgeLabels = {
-  id: 'rightEdgeLabels',
-  afterDatasetsDraw(chart, args, opts){
-    if(!opts?.enabled) return;
-    const { ctx, data, chartArea, scales } = chart;
-    const yAxis = scales[chart.getDatasetMeta(0).yAxisID || 'y'];
-    const xAxis = scales[chart.getDatasetMeta(0).xAxisID || 'x'];
-    const rightX = chartArea.right - 6;
-
-    // Collect visible non-capacity datasets
-    const dsList = data.datasets
-      .map((ds, i) => ({ ds, meta: chart.getDatasetMeta(i), i }))
-      .filter(x => !x.meta.hidden && !x.ds.isCapacity);
-
-    // Only top N by last value get labels (reduce clutter)
-    const lastVals = dsList.map(x=>{
-      // find last nonzero value index
-      let j = x.ds.data.length-1;
-      while(j>=0 && (!x.ds.data[j] || x.ds.data[j]===0)) j--;
-      const v = (j>=0) ? x.ds.data[j] : 0;
-      return { ...x, j, v };
-    }).sort((a,b)=> b.v - a.v).slice(0, opts.maxLabels || 10);
-
-    const placed = [];
-    ctx.save();
-    ctx.font = `${opts.fontSize||12}px Arial`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-
-    for(const item of lastVals){
-      const { ds, j } = item;
-      if(j<0) continue;
-      const y = yAxis.getPixelForValue(ds.data[j]);
-      let yy = y;
-      // simple collision avoidance
-      for(const py of placed){
-        if(Math.abs(yy - py) < 14) yy = py + 14;
-      }
-      placed.push(yy);
-
-      const label = truncate(ds._short || ds.label, opts.truncate || 18);
-      // outline for readability
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 4;
-      ctx.strokeText(label, rightX, yy);
-      ctx.fillStyle = ds.borderColor || '#111';
-      ctx.fillText(label, rightX, yy);
-    }
-    ctx.restore();
-  }
-};
-Chart.register(rightEdgeLabels);
-
-// Build clickable legend chips
-function buildSandLegend(topList, chartRef){
-  sandLegendDiv.innerHTML = "";
-  topList.forEach((p, idx)=>{
-    const chip = document.createElement('div');
-    chip.className = 'legend-chip';
-    const sw = document.createElement('div');
-    sw.className = 'legend-swatch';
-    sw.style.background = colorFor(p.label, 1);
-    const name = document.createElement('span');
-    name.textContent = truncate(p.label, 28);
-    const pct = document.createElement('span');
-    pct.className = 'pct';
-    pct.textContent = `(${(p.pct*100).toFixed(0)}%)`;
-    chip.appendChild(sw); chip.appendChild(name); chip.appendChild(pct);
-
-    chip.addEventListener('click', ()=>{
-      // toggle dataset visibility
-      const dsIndex = chartRef.data.datasets.findIndex(d => d.label === p.label);
-      if(dsIndex>=0){
-        const meta = chartRef.getDatasetMeta(dsIndex);
-        meta.hidden = !meta.hidden;
-        chip.classList.toggle('dim', meta.hidden);
-        chartRef.update();
-      }
-    });
-
-    sandLegendDiv.appendChild(chip);
-  });
-}
-
-// Rebuild
-function rebuildSandChart(){
-  const labels = currentLabels();
-  const period = currentPeriod;
-  const key     = currentKey;
-
-  const perProjFn = (period==='weekly') ? perProjectWeekly : perProjectMonthly;
-  const listC = showConfirmed ? perProjFn(projects, key, labels) : [];
-  const listP = showPotential ? perProjFn(potentialProjects, key, labels) : [];
-
-  // Combine enabled sources; compute % of total for legend
-  const combined = mergeProjectLists(listC, listP);
-  const totalHours = combined.reduce((a,b)=>a+b.total,0) || 1;
-
-  // Rank & cut to Top N; rest => "Other"
-  const TOP_N = 11; // 10 + Other
-  combined.sort((a,b)=> b.total - a.total);
-  const top = combined.slice(0, TOP_N - 1);
-  const rest = combined.slice(TOP_N - 1);
-  if(rest.length){
-    const other = rest.reduce((acc, x) => {
-      acc.total += x.total;
-      acc.data = sumArrays(acc.data, x.data);
-      return acc;
-    }, { label: "Other", total: 0, data: new Array(labels.length).fill(0) });
-    top.push(other);
-  }
-
-  // Populate focus dropdown (first option = none)
-  sandFocusSel.innerHTML = "";
-  const noneOpt = document.createElement('option'); noneOpt.value=""; noneOpt.textContent="— None —";
-  sandFocusSel.appendChild(noneOpt);
-  combined.forEach(p=>{
-    const o=document.createElement('option'); o.value=p.label; o.textContent=p.label;
-    if(p.label===sandFocusLabel) o.selected = true;
-    sandFocusSel.appendChild(o);
-  });
-
-  // Build datasets
-  const ds = top.map((p)=>{
-    const focused = (sandFocusLabel && p.label===sandFocusLabel);
-    const dimmed  = (sandFocusLabel && !focused);
-    return {
-      label: p.label,
-      _short: truncate(p.label, 24),
-      data: p.data,
-      type: 'line',
-      fill: true,
-      tension: (period==='monthly') ? 0 : 0.15,
-      pointRadius: 0,
-      borderWidth: focused ? 3 : 1,
-      backgroundColor: dimmed ? colorFor(p.label, 0.08) : colorFor(p.label, 0.28),
-      borderColor: dimmed ? colorFor(p.label, 0.45) : colorFor(p.label, 1),
-      stack: 'all'
-    };
-  });
-
-  // Capacity overlay
-  ds.push({
-    label: 'Capacity (hrs)',
-    data: capacityArray(key, labels, period),
-    type: 'line',
-    fill: false,
-    pointRadius: 0,
-    borderWidth: 2,
-    borderDash: [6,6],
-    borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-    yAxisID: 'y',
-    isCapacity: true
-  });
-
-  const ctxSand = document.getElementById('sandChart').getContext('2d');
-  const todayX = (period==='weekly') ? weekTodayLabel : monthTodayLabel;
-
-  if(sandChart){ sandChart.destroy(); sandChart = null; }
-  sandChart = new Chart(ctxSand, {
-    type: 'line',
-    data: { labels, datasets: ds },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      scales: {
-        x: { title: { display: true, text: period==='weekly' ? 'Week Starting' : 'Month Starting' } },
-        y: { title: { display: true, text: 'Hours' }, stacked: true, beginAtZero: true }
-      },
-      plugins: {
-        legend: { display: false }, // we provide our own chips
-        title: { display: true, text: 'Sand Chart — Per-Project Contribution' },
-        annotation: {
-          annotations: {
-            todayLine: {
-              type: 'line', xMin: todayX, xMax: todayX,
-              borderColor: '#9ca3af', borderWidth: 1, borderDash: [4,4],
-              label: { display: true, content: 'Today', position: 'start',
-                       color: '#6b7280', backgroundColor: 'rgba(255,255,255,0.8)' }
-            }
-          }
-        },
-        rightEdgeLabels: {
-          enabled: sandLabelsChk.checked,
-          maxLabels: 10,
-          fontSize: 12,
-          truncate: 22
-        }
-      }
-    }
-  });
-
-  // Build clickable legend chips (Top N with percentages of horizon)
-  const legendList = top.map(p => ({
-    label: p.label,
-    pct: p.total / totalHours
-  }));
-  buildSandLegend(legendList, sandChart);
-}
-
-// Listeners for sand controls
-sandFocusSel.addEventListener('change', (e)=>{ sandFocusLabel = e.target.value || ""; rebuildSandChart(); });
-sandLabelsChk.addEventListener('change', ()=>{ rebuildSandChart(); });
-
 // -------------------- KPIs & REFRESH --------------------
 function updateKPIs(){
   const labels = currentLabels();
   const capArr = capacityArray(currentKey, labels, currentPeriod);
-  const conf = (dataMap('c')[currentKey]?.series)||zeros(labels.length);
-  const pot  = (dataMap('p')[currentKey]?.series)||zeros(labels.length);
-  const combined = conf.map((v,i)=> (showConfirmed ? v : 0) + (showPotential ? (pot[i]||0) : 0));
+  const conf = (dataMap('c')[currentKey]?.series)||[];
+  const pot  = (dataMap('p')[currentKey]?.series)||[];
+  const combined = conf.map((v,i)=> v + (showPotential ? (pot[i]||0) : 0));
   let peak=0, peakIdx=0, worstDiff=-Infinity, worstIdx=0;
   for(let i=0;i<combined.length;i++){
     const u = capArr[i] ? (combined[i]/capArr[i]*100) : 0;
@@ -1045,12 +766,10 @@ function refreshDatasets(){
   chart.data.datasets[2].data  = (dataMap('p')[currentKey]?.series)||[];
   chart.data.datasets[3].label = `${deptName} Actual (hrs)`;
   chart.data.datasets[3].data  = (dataMap('a')[currentKey]?.series)||[];
-
-  chart.data.datasets[0].hidden = !showConfirmed;
   chart.data.datasets[2].hidden = !showPotential;
   chart.data.datasets[3].hidden = !showActual;
 
-  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential);
+  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
 
   const monthly = currentPeriod==='monthly';
   chart.data.datasets.forEach((ds, i)=>{
@@ -1068,7 +787,7 @@ function refreshDatasets(){
 
   if (utilChart) {
     utilChart.data.labels = currentLabels();
-    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showConfirmed, showPotential);
+    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showPotential);
     utilChart.options.scales.x.title.text = (currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting');
     const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
     utilChart.options.plugins.annotation.annotations.todayLine.xMin = todayX;
@@ -1077,13 +796,14 @@ function refreshDatasets(){
     utilChart.update();
   }
 
-  rebuildSandChart();
+  // reset & rebuild snapshot slider + charts
+  resetSnapshotSlider();
+  rebuildSnapshot();
 }
 
 // -------------------- LISTENERS --------------------
 sel.addEventListener('change', e=>{ currentKey = e.target.value; refreshDatasets(); });
-chkConf.addEventListener('change', e=>{ showConfirmed = e.target.checked; refreshDatasets(); });
-chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
+chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); rebuildSnapshot(); });
 chkAct.addEventListener('change', e=>{ showActual = e.target.checked; refreshDatasets(); });
 prodSlider.addEventListener('input', e=>{
   PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
@@ -1104,7 +824,7 @@ utilSepChk.addEventListener('change', e=>{
   rebuildUtilChart();
 });
 
-// -------------------- POPOVER --------------------
+// -------------------- POPOVER (single vs combined), anchored near click --------------------
 const pop = document.getElementById('drillPopover');
 const popTitle = document.getElementById('popTitle');
 const popHead = document.getElementById('popHead');
@@ -1112,12 +832,11 @@ const popBody = document.getElementById('popBody');
 document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
 
 function placePopoverAt(x, y){
-  pop.style.display='block'; // to get size
+  pop.style.display = 'block';
   const rect = pop.getBoundingClientRect();
   const pad = 12;
   const vw = window.innerWidth; const vh = window.innerHeight;
-  let left = x + 14;
-  let top  = y - 10;
+  let left = x + 14, top = y - 10;
   if (left + rect.width + pad > vw) left = vw - rect.width - pad;
   if (top + rect.height + pad > vh) top = vh - rect.height - pad;
   if (top < pad) top = pad;
@@ -1135,9 +854,7 @@ function openPopoverSingle(title, rows, x, y){
 }
 function mergeConfirmedPotential(bc, bp){
   const map = new Map();
-  (bc||[]).forEach(r=>{
-    map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0});
-  });
+  (bc||[]).forEach(r=>{ map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0}); });
   (bp||[]).forEach(r=>{
     if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0); }
     else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)}); }
@@ -1149,11 +866,9 @@ function mergeConfirmedPotential(bc, bp){
 function openPopoverCombined(title, rows, x, y){
   popTitle.textContent = title;
   popHead.innerHTML = "<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>";
-  if(rows&&rows.length){
-    popBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('');
-  } else {
-    popBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
-  }
+  popBody.innerHTML = rows&&rows.length
+    ? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('')
+    : `<tr><td colspan="4">No data</td></tr>`;
   placePopoverAt(x, y);
 }
 
@@ -1163,12 +878,32 @@ const impactProjectSel = document.getElementById('impactProject');
 const impactMult = document.getElementById('impactMult');
 const impactLead = document.getElementById('impactLead');
 const impactOT = document.getElementById('impactOT');
-const impactTarget = document.getElementById('impactTarget'); // reserved for future
+const impactTarget = document.getElementById('impactTarget'); // reserved for future logic
 const impactInd = document.getElementById('impactInd');
 const impactDel = document.getElementById('impactDel');
 const impactRun = document.getElementById('impactRun');
 const impactClear = document.getElementById('impactClear');
 const impactResult = document.getElementById('impactResult');
+
+const manualWrap = document.getElementById('manualWrap');
+const manualTop = document.getElementById('manualTop');
+const manualHours = document.getElementById('manualHours');
+
+// Build manual inputs (hidden by default)
+function buildManualInputs(){
+  manualTop.innerHTML = `
+    <label>Project Number<input id="manNumber" type="text" value="P-Manual"></label>
+    <label>Customer<input id="manCustomer" type="text" value="Customer"></label>
+    <label>Aircraft Model<input id="manAircraft" type="text" value=""></label>
+    <label>Scope<input id="manScope" type="text" value="Manual What-If"></label>
+    <label>Induction<input id="manInd" type="date" value="${ymd(new Date())}"></label>
+    <label>Delivery<input id="manDel" type="date" value="${ymd(mondayOf(new Date()))}"></label>
+  `;
+  manualHours.innerHTML = departmentCapacities.map(d=>{
+    return `<label>${d.name} (hrs)<input id="man_${d.key}" type="number" step="1" value="0"></label>`;
+  }).join('');
+}
+buildManualInputs();
 
 function fmtDateInput(d){
   const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0');
@@ -1185,15 +920,22 @@ function addWorkdays(d, n){
 }
 function maxDate(a,b){ return (a>b) ? a : b; }
 function minDate(a,b){ return (a<b) ? a : b; }
+
 function impactSourceProjects(){
   const src = impactSource.value;
+  if (src==='manual') return []; // handled separately
   return (src==='potential') ? potentialProjects : projects;
 }
 function setImpactProjects(){
-  const src = impactSource.value;
-  const arr = (src==='manual') ? [] : impactSourceProjects();
+  const arr = impactSourceProjects();
   impactProjectSel.innerHTML = "";
-  if(src!=='manual'){
+  if (impactSource.value==='manual'){
+    manualWrap.style.display = 'block';
+    impactProjectSel.disabled = true;
+    impactInd.value = ""; impactDel.value = "";
+  } else {
+    manualWrap.style.display = 'none';
+    impactProjectSel.disabled = false;
     arr.forEach((p, i)=>{
       const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
       const opt = document.createElement('option');
@@ -1202,43 +944,21 @@ function setImpactProjects(){
     });
     if(arr.length){
       const p = arr[0];
-      impactInd.value = p?.induction ? String(p.induction).slice(0,10) : "";
-      impactDel.value = p?.delivery ? String(p.delivery).slice(0,10) : "";
+      if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
+      if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
     } else {
       impactInd.value = ""; impactDel.value = "";
     }
   }
-  // toggle manual box visibility
-  document.getElementById('manualBox').style.display = (src==='manual') ? 'block' : 'none';
-  // disable project dropdown if manual
-  impactProjectSel.disabled = (src==='manual');
 }
 impactSource.addEventListener('change', setImpactProjects);
 impactProjectSel.addEventListener('change', ()=>{
   const arr = impactSourceProjects();
   const p = arr[Number(impactProjectSel.value)||0];
   if(!p) return;
-  impactInd.value = p?.induction ? String(p.induction).slice(0,10) : "";
-  impactDel.value = p?.delivery ? String(p.delivery).slice(0,10) : "";
+  if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
+  if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
 });
-
-// Build manual hours fields based on departments
-(function buildManualHours(){
-  const wrap = document.getElementById('manualHours');
-  wrap.innerHTML = "";
-  departmentCapacities.forEach(d=>{
-    const lbl = document.createElement('label');
-    lbl.innerHTML = `${d.name} hours <input type="number" step="1" min="0" id="mH_${d.key}" value="0">`;
-    wrap.appendChild(lbl);
-  });
-  // default manual dates to two weeks from today and +10 workdays
-  const today = new Date();
-  const ind = addWorkdays(today, 10);
-  const del = addWorkdays(ind, 10);
-  document.getElementById('mInd').value = fmtDateInput(ind);
-  document.getElementById('mDel').value = fmtDateInput(del);
-})();
-
 setImpactProjects();
 
 // Compute capacity per day for a department
@@ -1248,10 +968,14 @@ function capPerDay(key, overtimePct){
   const uplift = 1 + Math.max(0, (parseFloat(overtimePct)||0))/100;
   return (perWeek * uplift) / 5.0;
 }
+
+// Baseline arrays (confirmed only) for the current period
 function baselineSeries(period, key){
   const mapC = (period==='weekly') ? dataWConfirmed : dataMConfirmed;
   return (mapC[key]?.series || []).slice();
 }
+
+// Period index range covering [start..end]
 function periodRange(period, labels, start, end){
   let s=-1, e=-1;
   for(let i=0;i<labels.length;i++){
@@ -1264,13 +988,15 @@ function periodRange(period, labels, start, end){
   if(s===-1 || e===-1 || e<s) return null;
   return {s,e};
 }
+
+// Hours by period for the selected project (uniform over workdays/month)
 function projectHoursSeries(period, key, proj, mult, labels){
   const total = new Array(labels.length).fill(0);
   const hrs = (proj[key]||0) * (mult||1);
   if(hrs<=0) return total;
 
-  const a = parseDateLocalISO( proj.__ind || proj.induction );
-  const b = parseDateLocalISO( proj.__del || proj.delivery  );
+  const a = parseDateLocalISO( (impactInd.value && impactInd.value.length>=10) ? impactInd.value : proj.induction );
+  const b = parseDateLocalISO( (impactDel.value && impactDel.value.length>=10) ? impactDel.value : proj.delivery  );
   if(isNaN(a)||isNaN(b) || b<a) return total;
 
   if(period==='weekly'){
@@ -1293,6 +1019,8 @@ function projectHoursSeries(period, key, proj, mult, labels){
   }
   return total;
 }
+
+// Sum headroom (confirmed capacity minus confirmed load) in the window for a dept
 function sumHeadroom(period, key, start, end, overtimePct){
   const labels = (period==='weekly') ? weekLabels : monthLabels;
   const cap = capacityArray(key, labels, period);
@@ -1307,6 +1035,7 @@ function sumHeadroom(period, key, start, end, overtimePct){
   }
   return sum;
 }
+
 function renderImpactResult(obj){
   const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
   const dfmt = d=>fmtDateInput(d);
@@ -1343,18 +1072,19 @@ function renderImpactResult(obj){
   };
   chart.update();
 }
-impactRun.addEventListener('click', ()=>{
-  const src = impactSource.value;
 
+impactRun.addEventListener('click', ()=>{
   let proj = null;
-  if(src==='manual'){
-    proj = { number: document.getElementById('mNum').value || 'Manual',
-             customer: document.getElementById('mCust').value || '—',
-             induction: document.getElementById('mInd').value,
-             delivery:  document.getElementById('mDel').value };
-    // collect manual hours
+  if (impactSource.value==='manual'){
+    // build from manual inputs
+    proj = { number: document.getElementById('manNumber').value || 'P-Manual',
+             customer: document.getElementById('manCustomer').value || 'Customer',
+             aircraftModel: document.getElementById('manAircraft').value || '',
+             scope: document.getElementById('manScope').value || 'Manual What-If',
+             induction: document.getElementById('manInd').value || ymd(new Date()),
+             delivery:  document.getElementById('manDel').value || ymd(addWorkdays(new Date(), 5)) };
     departmentCapacities.forEach(d=>{
-      const v = parseFloat(document.getElementById('mH_'+d.key).value||'0')||0;
+      const v = parseFloat(document.getElementById(`man_${d.key}`).value || '0') || 0;
       proj[d.key] = v;
     });
   } else {
@@ -1368,8 +1098,9 @@ impactRun.addEventListener('click', ()=>{
   const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
   const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
 
-  const rawStart = parseDateLocalISO(impactInd.value ? impactInd.value : (proj.__ind || proj.induction));
-  const rawEnd   = parseDateLocalISO(impactDel.value ? impactDel.value : (proj.__del || proj.delivery));
+  const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
+  const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
+
   if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){
     impactResult.textContent = "Invalid induction/delivery dates."; return;
   }
@@ -1405,16 +1136,224 @@ impactRun.addEventListener('click', ()=>{
     earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows
   });
 });
+
 impactClear.addEventListener('click', ()=>{
-  delete chart.options.plugins.annotation.annotations.whatIfStart;
-  delete chart.options.plugins.annotation.annotations.whatIfEnd;
-  chart.update();
   impactResult.innerHTML = "";
+  try {
+    delete chart.options.plugins.annotation.annotations.whatIfStart;
+    delete chart.options.plugins.annotation.annotations.whatIfEnd;
+    chart.update();
+  } catch(e){}
 });
 
-// initial render
+// --------------------- SNAPSHOT (Sankey / Treemap / Pareto) ---------------------
+const snapConfirm = document.getElementById('snapConfirm');
+const snapPotential = document.getElementById('snapPotential');
+const snapIdx = document.getElementById('snapIdx');
+const snapLabel = document.getElementById('snapLabel');
+
+let sankeyChart = null, treemapChart = null, paretoChart = null;
+
+function resetSnapshotSlider(){
+  const labels = currentLabels();
+  snapIdx.min = "0";
+  snapIdx.max = String(Math.max(0, labels.length-1));
+  snapIdx.value = "0";
+  updateSnapshotUI();
+}
+function updateSnapshotUI(){
+  const idx = parseInt(snapIdx.value||"0", 10);
+  const labels = currentLabels();
+  snapLabel.textContent = labels[idx] || "—";
+}
+snapIdx.addEventListener('input', ()=>{ updateSnapshotUI(); rebuildSnapshot(); });
+snapConfirm.addEventListener('change', rebuildSnapshot);
+snapPotential.addEventListener('change', rebuildSnapshot);
+
+function projLabel(p){
+  const n = (p.number||"—"); const c=(p.customer||"Unknown");
+  let s = `${n} · ${c}`;
+  if (s.length>28) s = s.slice(0,26)+"…";
+  return s;
+}
+
+// compute snapshot contributions by project for selected period/disc
+function snapshotData(){
+  const labels = currentLabels();
+  const i = parseInt(snapIdx.value||"0",10);
+  const period = currentPeriod;
+  const key = currentKey;
+
+  const includeC = snapConfirm.checked;
+  const includeP = snapPotential.checked;
+
+  let rows = []; // {label, hours, status}
+  let total = 0;
+
+  function addFrom(arr, status){
+    for(const p of arr){
+      const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
+      if(isNaN(a)||isNaN(b)||b<a) continue;
+      let h = 0;
+      if(period==='weekly'){
+        // match weekly logic: uniform across covered weeks
+        // find s..e week coverage
+        const labs = labels; // weekly
+        let s=-1,e=-1;
+        for(let k=0;k<labs.length;k++){
+          const L=parseDateLocalISO(labs[k]);
+          if(L>=a && s===-1) s=k;
+          if(L<=b) e=k;
+        }
+        if(s!==-1 && e!==-1 && i>=s && i<=e){
+          const n = (e-s+1);
+          h = (p[key]||0) / n;
+        }
+      } else {
+        // monthly: proportion of workdays in overlap of this month
+        const mStart = parseDateLocalISO(labels[i]);
+        const mEnd = lastOfMonth(mStart);
+        const ovS = new Date(Math.max(mStart, a));
+        const ovE = new Date(Math.min(mEnd, b));
+        if(ovE>=ovS){
+          const projWD = Math.max(1, workdaysInclusive(a,b));
+          const monWD  = workdaysInclusive(ovS,ovE);
+          h = (p[key]||0) * (monWD/projWD);
+        }
+      }
+      if(h>0){
+        rows.push({ label: projLabel(p), hours: h, status });
+        total += h;
+      }
+    }
+  }
+
+  if(includeC) addFrom(projects, 'confirmed');
+  if(includeP) addFrom(potentialProjects, 'potential');
+
+  // group by project label (in case of duplicates)
+  const map = new Map();
+  rows.forEach(r=>{
+    const k = r.label + '|' + r.status;
+    map.set(k, (map.get(k)||0)+r.hours);
+  });
+
+  const byStatus = Array.from(map.entries()).map(([k,v])=>{
+    const [label, status] = k.split('|');
+    return {label, status, hours: v};
+  });
+
+  // aggregate by project regardless of status (for treemap/pareto)
+  const totalByProj = {};
+  byStatus.forEach(r=>{
+    totalByProj[r.label] = (totalByProj[r.label]||0) + r.hours;
+  });
+
+  return { byStatus, totalByProj, total };
+}
+
+function rebuildSnapshot(){
+  const keyColor = {
+    confirmed: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
+    potential: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim()
+  };
+
+  const { byStatus, totalByProj, total } = snapshotData();
+
+  // ----- Sankey -----
+  const flows = byStatus.map(r=>({
+    from: r.label,
+    to: (dataMap('c')[currentKey]?.name)||'Dept',
+    flow: r.hours,
+    color: keyColor[r.status] || '#999'
+  }));
+  const skCtx = document.getElementById('sankeyCanvas').getContext('2d');
+  if (sankeyChart) { sankeyChart.destroy(); sankeyChart = null; }
+  sankeyChart = new Chart(skCtx, {
+    type: 'sankey',
+    data: { datasets: [{ data: flows, colorFrom: (c)=>c.raw.color, colorTo: (c)=>c.raw.color, colorMode:'gradient' }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
+        label: (ctx)=> {
+          const v = ctx.raw?.flow || 0;
+          const pct = total>0 ? ((v/total)*100).toFixed(1) : '0.0';
+          return `${ctx.raw.from} → ${ctx.raw.to}: ${v.toFixed(1)} hrs (${pct}%)`;
+        }}}}
+    }
+  });
+
+  // ----- Treemap -----
+  const tmCtx = document.getElementById('treemapCanvas').getContext('2d');
+  if (treemapChart) { treemapChart.destroy(); treemapChart = null; }
+  const treemapData = Object.entries(totalByProj).map(([label, v])=>({label, v}));
+  treemapChart = new Chart(tmCtx, {
+    type:'treemap',
+    data:{ datasets: [{
+      tree: treemapData,
+      key: 'v',
+      labels: { display:true, formatter: (ctx)=>{
+        const v = ctx.raw.v || 0;
+        const pct = total>0 ? Math.round(v/total*100) : 0;
+        const name = ctx.raw.label;
+        return `${name}\n${v.toFixed(0)} hrs • ${pct}%`;
+      }},
+      backgroundColor: (ctx)=>{
+        const label = ctx.raw.label;
+        // find its dominant status color (based on byStatus, fallback brand)
+        let cCount=0, pCount=0;
+        byStatus.forEach(r=>{ if(r.label===label){ if(r.status==='confirmed') cCount+=r.hours; else pCount+=r.hours; }});
+        return (pCount>cCount) ? keyColor.potential : keyColor.confirmed;
+      },
+      borderWidth:1, borderColor:'#fff'
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+  });
+
+  // ----- Pareto -----
+  const prCtx = document.getElementById('paretoCanvas').getContext('2d');
+  if (paretoChart) { paretoChart.destroy(); paretoChart = null; }
+  const pairs = Object.entries(totalByProj).map(([k,v])=>[k,v]).sort((a,b)=>b[1]-a[1]);
+  const labels = pairs.map(p=>p[0]);
+  const vals = pairs.map(p=>p[1]);
+  const cum = [];
+  let running = 0;
+  vals.forEach(v=>{ running+=v; cum.push(total>0 ? (running/total*100) : 0); });
+  paretoChart = new Chart(prCtx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'Hours', data: vals, borderWidth:0, backgroundColor:'#9CA3AF' },
+        { label:'Cumulative %', data: cum, type:'line', yAxisID:'y2', borderColor:'#111827', backgroundColor:'rgba(17,24,39,0.1)', tension:0.2, pointRadius:2 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
+        y2:{ position:'right', beginAtZero:true, suggestedMax:100, ticks:{ callback:(v)=>`${v}%`}, grid:{drawOnChartArea:false} }
+      },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
+        afterBody:(items)=>{
+          const i = items?.[0]?.dataIndex ?? -1;
+          if(i<0) return '';
+          const v = vals[i]; const pct = total>0 ? (v/total*100).toFixed(1) : '0.0';
+          return `Share: ${pct}%`;
+        }
+      }}}
+    }
+  });
+}
+
+// Snapshot initial
+resetSnapshotSlider();
+
+// --------------------- initial render ---------------------
 refreshDatasets();
 rebuildUtilChart();
+rebuildSnapshot();
+
 </script>
 </body>
 </html>
@@ -1429,5 +1368,5 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-# Taller iframe; no inner scroll (prevents double scrollbars)
-components.html(html_code, height=2100, scrolling=False)
+# Make the iframe tall and disable its own scrolling to avoid double scrollbars
+components.html(html_code, height=2300, scrolling=False)
