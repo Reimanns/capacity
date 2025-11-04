@@ -137,17 +137,8 @@ html_template = """
 <head>
   <meta charset="UTF-8" />
   <title>Labor Capacity Dashboard</title>
-
-  <!-- Chart.js core + annotation -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.2/dist/chartjs-plugin-annotation.min.js"></script>
-  <script>
-    try { if (window['chartjs-plugin-annotation']) { Chart.register(window['chartjs-plugin-annotation']); } } catch(e) {}
-  </script>
-
-  <!-- ECharts for Sankey & Treemap (reliable UMD build) -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
   <style>
     :root{
       --brand:#003366; --brand-20: rgba(0,51,102,0.2);
@@ -155,14 +146,16 @@ html_template = """
       --potential:#2e7d32; --potential-20: rgba(46,125,50,0.2);
       --actual:#ef6c00; --actual-20: rgba(239,108,0,0.2);
       --muted:#6b7280;
-      --confirmed:#2563eb;
-      --potential2:#059669;
+      --fs-label: 13px;
+      --fs-input: 13px;
+      --field-h: 36px;
     }
     html, body { height:100%; }
     body { font-family: Arial, sans-serif; margin: 8px 14px 24px; overflow-x:hidden; }
     h1 { text-align:center; margin: 6px 0 4px; }
     .controls { display:flex; gap:16px; flex-wrap:wrap; align-items:center; justify-content:center; margin: 8px auto 10px; }
-    .controls label { font-size:14px; display:flex; align-items:center; gap:6px; }
+    .controls label { font-size:var(--fs-label); display:flex; align-items:center; gap:6px; }
+    .controls input[type="number"], .controls input[type="date"], .controls select, .controls input[type="range"] { font-size:var(--fs-input); height:var(--field-h); }
     .metric-bar { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin: 8px 0 10px; }
     .metric { border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; min-width:220px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background:#fff; }
     .metric .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
@@ -171,7 +164,7 @@ html_template = """
     .chart-wrap.util { height:380px; margin-top: 8px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
-    /* Anchored popover for drilldown */
+    /* Anchored popover */
     .popover {
       display:none; position:fixed; z-index:9999; max-width:min(92vw, 900px);
       background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.2);
@@ -183,38 +176,39 @@ html_template = """
     .popover th, .popover td { border-bottom:1px solid #eee; padding:6px 8px; text-align:left; font-size:13px; }
 
     /* What-If panel */
-    .impact-grid{
-      display:grid; gap:10px; grid-template-columns: repeat(6, minmax(120px,1fr));
-      align-items:end; margin:10px 0 6px;
-    }
-    .impact-grid label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
-    .impact-grid input, .impact-grid select, .impact-grid button{ padding:8px; border:1px solid #e5e7eb; border-radius:8px; font-size:13px;}
-    .impact-grid button{ cursor:pointer; background:#111827; color:#fff; border-color:#111827; }
-    .impact-box{ border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#fff; font-size:13px;}
-    .impact-table{ width:100%; border-collapse:collapse; margin-top:6px; }
-    .impact-table th,.impact-table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:left; }
-
     details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
     details.impact summary{ cursor:pointer; font-weight:600; }
 
-    /* Manual project sub-panel */
-    .manual-panel { display:none; border:1px dashed #cbd5e1; border-radius:10px; padding:10px; background:#fff; }
-    .manual-grid { display:grid; gap:10px; grid-template-columns: repeat(6, minmax(120px,1fr)); margin-top:8px; }
-    .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
-    .manual-hours { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(100px,1fr)); margin-top:10px; }
+    .impact-grid{
+      display:grid; gap:10px; grid-template-columns: repeat(6, minmax(150px,1fr));
+      align-items:end; margin:10px 0 6px;
+    }
+    .impact-grid label{ font-size:var(--fs-label); color:#374151; display:flex; flex-direction:column; gap:6px; }
+    .impact-grid input, .impact-grid select, .impact-grid button{
+      padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; font-size:var(--fs-input); height:var(--field-h); box-sizing:border-box; width:100%;
+    }
+    .impact-grid button{ cursor:pointer; background:#111827; color:#fff; border-color:#111827; }
 
-    /* Snapshot breakdown */
-    details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
-    details.snapshot summary{ cursor:pointer; font-weight:600; }
-    .snap-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0; }
-    .snap-grid { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(250px,1fr)); }
-    .snap-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; height:360px; display:flex; flex-direction:column; }
-    .snap-card h4 { margin:0 0 6px 0; font-size:14px; color:#111827; }
-    .snap-legend { font-size:12px; color:#374151; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:4px 0 6px; }
-    .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; }
-    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
-    .snap-echart { width:100%; flex:1 1 auto; }
+    .impact-actions { display:flex; gap:10px; align-items:center; }
+    .btn-secondary{ background:#f3f4f6; color:#111827; border:1px solid #e5e7eb; }
 
+    /* Manual project block (hidden until selected) */
+    #manualContainer{ display:none; margin-top:8px; }
+    .manual-grid{
+      display:grid; gap:10px; grid-template-columns: repeat(4, minmax(180px,1fr)); margin-top:8px;
+    }
+    .manual-grid label{ font-size:var(--fs-label); color:#374151; display:flex; flex-direction:column; gap:6px; }
+    .manual-grid input, .manual-grid select{
+      padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; font-size:var(--fs-input); height:var(--field-h); box-sizing:border-box; width:100%;
+    }
+
+    .manual-hours{
+      margin-top:10px;
+      display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+    }
+    .manual-hours .f{ display:flex; flex-direction:column; gap:6px; }
+    .manual-hours label{ font-size:var(--fs-label); color:#374151; }
+    .manual-hours input{ padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; font-size:var(--fs-input); height:var(--field-h); box-sizing:border-box; width:100%; }
   </style>
 </head>
 <body>
@@ -241,7 +235,7 @@ html_template = """
   </label>
 
   <label><strong>Hours / FTE / wk:</strong>
-    <input type="number" id="hoursPerFTE" min="30" max="60" step="1" value="40" style="width:64px;">
+    <input type="number" id="hoursPerFTE" min="30" max="60" step="1" value="40" style="width:84px;">
   </label>
 
   <label><input type="checkbox" id="utilSeparate" checked> Utilization in separate chart</label>
@@ -256,6 +250,7 @@ html_template = """
 <!-- What-If Schedule Impact -->
 <details class="impact" open>
   <summary>What-If Schedule Impact</summary>
+
   <div class="impact-grid">
     <label>Source dataset
       <select id="impactSource">
@@ -264,11 +259,9 @@ html_template = """
         <option value="manual">Manual</option>
       </select>
     </label>
-
-    <label id="impactProjWrap">Project
+    <label id="impactProjectWrap">Project
       <select id="impactProject"></select>
     </label>
-
     <label>Scope multiplier
       <input id="impactMult" type="number" step="0.05" value="1.00">
     </label>
@@ -289,35 +282,36 @@ html_template = """
       <input type="date" id="impactDel">
     </label>
 
-    <button id="impactRun">Calculate Impact</button>
-    <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
+    <div class="impact-actions">
+      <button id="impactRun">Calculate Impact</button>
+      <button id="impactClear" class="btn-secondary" type="button">Clear What-If</button>
+    </div>
   </div>
 
-  <!-- Manual project details (shown only when source = Manual) -->
-  <div class="manual-panel" id="manualPanel">
-    <div class="manual-grid">
-      <label>Project Number
-        <input id="m_number" type="text" value="P-Manual">
-      </label>
-      <label>Customer
-        <input id="m_customer" type="text" value="Manual">
-      </label>
-      <label>Aircraft Model
-        <input id="m_aircraft" type="text" value="">
-      </label>
-      <label>Scope
-        <input id="m_scope" type="text" value="What-If">
-      </label>
-      <label>Induction
-        <input id="m_ind" type="date">
-      </label>
-      <label>Delivery
-        <input id="m_del" type="date">
-      </label>
-    </div>
-    <div class="manual-hours" id="manualHours">
-      <!-- dept hours inputs injected here -->
-    </div>
+  <!-- Manual block (hidden until 'manual' is selected) -->
+  <div id="manualContainer" class="impact-box">
+    <details id="manualDetails" open>
+      <summary><strong>Manual project details</strong></summary>
+
+      <div class="manual-grid">
+        <label>Project Number
+          <input id="mNumber" type="text" value="MAN-001">
+        </label>
+        <label>Customer
+          <input id="mCustomer" type="text" value="Customer">
+        </label>
+        <label>Induction
+          <input id="mInd" type="date">
+        </label>
+        <label>Delivery
+          <input id="mDel" type="date">
+        </label>
+      </div>
+
+      <div class="manual-hours" id="manualHoursGrid">
+        <!-- discipline hour fields injected by JS -->
+      </div>
+    </details>
   </div>
 
   <div id="impactResult" class="impact-box"></div>
@@ -327,37 +321,6 @@ html_template = """
 <div class="chart-wrap util" style="display:block;"><canvas id="utilChart"></canvas></div>
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
-
-<!-- Snapshot Breakdown (Sankey, Treemap, Pareto) -->
-<details class="snapshot" open>
-  <summary>Snapshot Breakdown (Projects → Dept) &nbsp;—&nbsp; Compare alternatives</summary>
-  <div class="snap-controls">
-    <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
-    <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
-    <label>Top N projects
-      <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
-      <span id="snapTopNVal">8</span>
-    </label>
-    <span class="snap-legend">
-      <span class="chip"><span class="dot" style="background:var(--confirmed)"></span> Confirmed</span>
-      <span class="chip"><span class="dot" style="background:var(--potential2)"></span> Potential</span>
-    </span>
-  </div>
-  <div class="snap-grid">
-    <div class="snap-card">
-      <h4>Sankey: Project → Dept (by hours)</h4>
-      <div id="sankeyDiv" class="snap-echart"></div>
-    </div>
-    <div class="snap-card">
-      <h4>Treemap: Project contribution</h4>
-      <div id="treemapDiv" class="snap-echart"></div>
-    </div>
-    <div class="snap-card">
-      <h4>Pareto: Top contributors</h4>
-      <canvas id="paretoCanvas"></canvas>
-    </div>
-  </div>
-</details>
 
 <!-- Anchored popover -->
 <div class="popover" id="drillPopover" role="dialog" aria-modal="true" aria-labelledby="popTitle">
@@ -383,31 +346,67 @@ const departmentCapacities = __DEPTS__;
 let PRODUCTIVITY_FACTOR = 0.85;
 let HOURS_PER_FTE = 40;
 
-// -------------------- Helpers --------------------
-function parseDateLocalISO(s){ if(!s) return new Date(NaN); const t=String(s).split('T')[0]; const [y,m,d]=t.split('-').map(Number); return new Date(y,(m||1)-1,d||1); }
+// -------------------- TZ-SAFE DATE HELPERS --------------------
+function parseDateLocalISO(s){
+  if(!s) return new Date(NaN);
+  const t = String(s).split('T')[0];
+  const [y,m,d] = t.split('-').map(Number);
+  return new Date(y, (m||1)-1, d||1);
+}
 function ymd(d){ return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-'); }
 function mondayOf(d){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); const day=(t.getDay()+6)%7; t.setDate(t.getDate()-day); return t; }
 function firstOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function lastOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
 function isWorkday(d){ const day = d.getDay(); return day >= 1 && day <= 5; }
-function workdaysInclusive(a,b){ const start=new Date(a.getFullYear(), a.getMonth(), a.getDate()); const end=new Date(b.getFullYear(), b.getMonth(), b.getDate()); let c=0, d=new Date(start); while(d<=end){ if(isWorkday(d)) c++; d.setDate(d.getDate()+1);} return c; }
-function workdaysInMonth(d){ return workdaysInclusive(firstOfMonth(d), lastOfMonth(d)); }
-function projectLabel(p){ return `${p.number || '—'} — ${p.customer || 'Unknown'}`; }
+function workdaysInclusive(a,b){
+  const start = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const end   = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  let c = 0, d = new Date(start);
+  while (d <= end) { if (isWorkday(d)) c++; d.setDate(d.getDate()+1); }
+  return c;
+}
+function workdaysInMonth(d){
+  const mStart = firstOfMonth(d);
+  const mEnd   = lastOfMonth(d);
+  return workdaysInclusive(mStart, mEnd);
+}
 
-// -------------------- Labels --------------------
-function getWeekList(){ let minD=null,maxD=null; function exp(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } } if(projects.length)exp(projects); if(potentialProjects.length)exp(potentialProjects); if(projectsActual.length)exp(projectsActual); if(!minD||!maxD){ const start=mondayOf(new Date()); return [ymd(start)]; } const start=mondayOf(minD); const weeks=[]; const cur=new Date(start); while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7);} return weeks.map(ymd); }
-function getMonthList(){ let minD=null,maxD=null; function exp(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } } if(projects.length)exp(projects); if(potentialProjects.length)exp(potentialProjects); if(projectsActual.length)exp(projectsActual); if(!minD||!maxD){ const start=firstOfMonth(new Date()); return [ymd(start)]; } const start=firstOfMonth(minD); const end=firstOfMonth(maxD); const months=[]; const cur=new Date(start); while(cur<=end){ months.push(new Date(cur)); cur.setMonth(cur.getMonth()+1); } return months.map(ymd); }
+// -------------------- LABELS --------------------
+function getWeekList(){
+  let minD=null,maxD=null;
+  function expand(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
+  if(projects.length) expand(projects);
+  if(potentialProjects.length) expand(potentialProjects);
+  if(projectsActual.length) expand(projectsActual);
+  if(!minD||!maxD){ const start=mondayOf(new Date()); return [ymd(start)]; }
+  const start=mondayOf(minD); const weeks=[]; const cur=new Date(start);
+  while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7); }
+  return weeks.map(ymd);
+}
+function getMonthList(){
+  let minD=null,maxD=null;
+  function expand(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } }
+  if(projects.length) expand(projects);
+  if(potentialProjects.length) expand(potentialProjects);
+  if(projectsActual.length) expand(projectsActual);
+  if(!minD||!maxD){ const start=firstOfMonth(new Date()); return [ymd(start)]; }
+  const start=firstOfMonth(minD); const end=firstOfMonth(maxD);
+  const months=[]; const cur=new Date(start);
+  while(cur<=end){ months.push(new Date(cur)); cur.setMonth(cur.getMonth()+1); }
+  return months.map(ymd);
+}
 
-// -------------------- Weekly/Monthly Loads --------------------
+// -------------------- WEEKLY LOADS --------------------
 function computeWeeklyLoadsDetailed(arr, key, labels){
   const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
   for(const p of arr){
     const hrs=p[key]||0; if(!hrs) continue;
     const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery);
-    let s=-1,e=-1; for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=b) e=i; }
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=b) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
     }
   }
   return {series:total, breakdown};
@@ -420,14 +419,17 @@ function computeWeeklyLoadsActual(arr, key, labels){
     const a=parseDateLocalISO(p.induction), planned=parseDateLocalISO(p.delivery);
     const end = (a>today) ? planned : (planned<today? planned : today);
     if(end<a) continue;
-    let s=-1,e=-1; for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=end) e=i; }
+    let s=-1,e=-1;
+    for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=end) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
     }
   }
   return {series:total, breakdown};
 }
+
+// -------------------- MONTHLY LOADS (workdays only) --------------------
 function computeMonthlyLoadsDetailed(arr, key, monthLabels){
   const total=new Array(monthLabels.length).fill(0); const breakdown=monthLabels.map(()=>[]);
   for(const p of arr){
@@ -443,7 +445,7 @@ function computeMonthlyLoadsDetailed(arr, key, monthLabels){
         const overlapWD = workdaysInclusive(overlapStart, overlapEnd);
         const hoursMonth = hrs * (overlapWD / projWD);
         total[i] += hoursMonth;
-        breakdown[i].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:hoursMonth});
+        breakdown[i].push({customer:(p.customer||"Unknown"), hours:hoursMonth});
       }
     }
   }
@@ -467,14 +469,14 @@ function computeMonthlyLoadsActual(arr, key, monthLabels){
         const overlapWD = workdaysInclusive(overlapStart, overlapEnd);
         const hoursMonth = hrs * (overlapWD / projWD);
         total[i] += hoursMonth;
-        breakdown[i].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:hoursMonth});
+        breakdown[i].push({customer:(p.customer||"Unknown"), hours:hoursMonth});
       }
     }
   }
   return {series:total, breakdown};
 }
 
-// -------------------- Data Maps --------------------
+// -------------------- LABELS & DATA MAPS --------------------
 const weekLabels = getWeekList();
 const monthLabels = getMonthList();
 
@@ -497,7 +499,7 @@ departmentCapacities.forEach(d=>{
   dataMActual[d.key]   ={name:d.name, series:am.series, breakdown:am.breakdown};
 });
 
-// -------------------- UI Elm refs --------------------
+// -------------------- UI ELEMENTS --------------------
 const sel = document.getElementById('disciplineSelect');
 departmentCapacities.forEach(d=>{ const o=document.createElement('option'); o.value=d.key; o.textContent=d.name; sel.appendChild(o); });
 sel.value=departmentCapacities[0]?.key || "";
@@ -510,7 +512,7 @@ const chkAct = document.getElementById('showActual');
 const periodSel = document.getElementById('periodSel');
 const utilSepChk = document.getElementById('utilSeparate');
 
-// -------------------- Capacity & Util --------------------
+// -------------------- CAPACITY & UTILIZATION --------------------
 function capacityArray(key, labels, period){
   const dept = departmentCapacities.find(x=>x.key===key);
   const capPerWeek = (dept?.headcount || 0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
@@ -518,7 +520,7 @@ function capacityArray(key, labels, period){
   return labels.map(lbl=>{
     const d = parseDateLocalISO(lbl);
     const wd = workdaysInMonth(d);
-    return (capPerWeek / 5) * wd;
+    return (capPerWeek / 5) * wd;  // scale by workdays in that month
   });
 }
 function utilizationArray(period, key, includePotential){
@@ -537,7 +539,7 @@ const annos = { annotations:{ todayLine:{ type:'line', xMin: weekTodayLabel, xMa
   borderColor:'#9ca3af', borderWidth:1, borderDash:[4,4],
   label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' } } } };
 
-// -------------------- Main Chart --------------------
+// -------------------- CHARTS --------------------
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
 let currentPeriod = 'weekly';
@@ -597,7 +599,7 @@ let chart = new Chart(ctx,{
     onClick:(evt, elems)=>{
       if(!elems||!elems.length) return;
       const {datasetIndex, index:idx} = elems[0];
-      if(datasetIndex===1 || datasetIndex===4) return;
+      if(datasetIndex===1 || datasetIndex===4) return; // ignore capacity & utilization
 
       const labels = currentLabels();
       const name = (dataMap('c')[currentKey]?.name)||'Dept';
@@ -628,6 +630,7 @@ let chart = new Chart(ctx,{
         title = `${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`;
       } else { return; }
 
+      // anchor popover near click
       const native = evt?.native || evt?.nativeEvent || evt;
       const cx = (native?.clientX ?? 200);
       const cy = (native?.clientY ?? 200);
@@ -637,6 +640,7 @@ let chart = new Chart(ctx,{
   }
 });
 
+// -------- Utilization mini-chart handling --------
 function createUtilChart(){
   const ctx2 = document.getElementById('utilChart').getContext('2d');
   const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
@@ -660,41 +664,61 @@ function createUtilChart(){
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { title: { display: true, text: currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting' } },
-        y: { title: { display: true, text: 'Utilization %' }, beginAtZero: true, suggestedMax: 160, ticks: { callback: (v)=>`${v}%` } },
+        y: {
+          title: { display: true, text: 'Utilization %' },
+          beginAtZero: true,
+          suggestedMax: 160,
+          ticks: { callback: (val) => `${val}%` }
+        }
       },
       plugins: {
         legend: { display: false },
         title: { display: true, text: 'Utilization %' },
         annotation: {
           annotations: {
-            todayLine: { type:'line', xMin: todayX, xMax: todayX, borderColor:'#9ca3af', borderWidth:1, borderDash:[4,4],
-              label:{ display:true, content:'Today', position:'start', color:'#6b7280', backgroundColor:'rgba(255,255,255,0.8)' } },
-            target100: { type:'line', yMin:100, yMax:100, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
-              borderWidth:2, borderDash:[6,3],
-              label:{ display:true, content:'100% target', position:'end', backgroundColor:'rgba(255,255,255,0.9)',
-                color:getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim() } }
+            todayLine: {
+              type: 'line', xMin: todayX, xMax: todayX,
+              borderColor: '#9ca3af', borderWidth: 1, borderDash: [4,4],
+              label: { display: true, content: 'Today', position: 'start', color: '#6b7280',
+                       backgroundColor: 'rgba(255,255,255,0.8)' }
+            },
+            target100: {
+              type: 'line',
+              yMin: 100, yMax: 100,
+              borderColor: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+              borderWidth: 2,
+              borderDash: [6,3],
+              label: {
+                display: true,
+                content: '100% target',
+                position: 'end',
+                backgroundColor: 'rgba(255,255,255,0.9)',
+                color: getComputedStyle(document.documentElement).getPropertyValue('--capacity').trim(),
+              }
+            }
           }
         }
       }
     }
   });
 }
+
 function rebuildUtilChart(){
   const wrap = document.querySelector('.chart-wrap.util');
   if (utilSeparate) {
     wrap.style.display = 'block';
     if (utilChart) { utilChart.destroy(); utilChart = null; }
     createUtilChart();
-    chart.data.datasets[4].hidden = true;
+    chart.data.datasets[4].hidden = true; // hide on main chart
   } else {
     wrap.style.display = 'none';
     if (utilChart) { utilChart.destroy(); utilChart = null; }
-    chart.data.datasets[4].hidden = false;
+    chart.data.datasets[4].hidden = false; // show on main chart
   }
   chart.update();
 }
 
-// -------------------- KPIs & refresh --------------------
+// -------------------- KPIs & REFRESH --------------------
 function updateKPIs(){
   const labels = currentLabels();
   const capArr = capacityArray(currentKey, labels, currentPeriod);
@@ -714,6 +738,7 @@ function updateKPIs(){
   const capUnit = currentPeriod==='weekly' ? `${capArr[0]?.toFixed(0)||0} hrs / wk` : `~${(capArr[0]||0).toFixed(0)} hrs / mo (workdays)`;
   document.getElementById('weeklyCap').textContent = capUnit;
 }
+
 function refreshDatasets(){
   const labels = currentLabels();
   chart.data.labels = labels;
@@ -733,7 +758,10 @@ function refreshDatasets(){
   chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
 
   const monthly = currentPeriod==='monthly';
-  chart.data.datasets.forEach((ds, i)=>{ ds.tension = monthly ? 0 : 0.1; if(i===1){ ds.stepped = monthly ? true : false; } });
+  chart.data.datasets.forEach((ds, i)=>{
+    ds.tension = monthly ? 0 : 0.1;
+    if(i===1){ ds.stepped = monthly ? true : false; }
+  });
   chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
   chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
 
@@ -753,88 +781,258 @@ function refreshDatasets(){
     utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
     utilChart.update();
   }
-
-  rebuildSnapshot();
 }
 
-// -------------------- Popover --------------------
+// -------------------- LISTENERS --------------------
+sel.addEventListener('change', e=>{ currentKey = e.target.value; refreshDatasets(); });
+chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
+chkAct.addEventListener('change', e=>{ showActual = e.target.checked; refreshDatasets(); });
+prodSlider.addEventListener('input', e=>{
+  PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
+  refreshDatasets();
+});
+hoursInput.addEventListener('change', e=>{
+  const v = parseInt(e.target.value||'40',10);
+  HOURS_PER_FTE = isNaN(v) ? 40 : Math.min(60, Math.max(30, v));
+  e.target.value = HOURS_PER_FTE;
+  refreshDatasets();
+});
+periodSel.addEventListener('change', e=>{
+  currentPeriod = e.target.value; 
+  refreshDatasets();
+});
+utilSepChk.addEventListener('change', e=>{
+  utilSeparate = e.target.checked;
+  rebuildUtilChart();
+});
+
+// -------------------- POPOVER (single vs combined) --------------------
 const pop = document.getElementById('drillPopover');
 const popTitle = document.getElementById('popTitle');
 const popHead = document.getElementById('popHead');
 const popBody = document.getElementById('popBody');
 document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
-function placePopoverAt(x, y){ pop.style.display='block'; const rect=pop.getBoundingClientRect(); const pad=12; const vw=innerWidth; const vh=innerHeight; let left=x+14, top=y-10; if(left+rect.width+pad>vw) left=vw-rect.width-pad; if(top+rect.height+pad>vh) top=vh-rect.height-pad; if(top<pad) top=pad; if(left<pad) left=pad; pop.style.left=left+"px"; pop.style.top=top+"px"; }
-function openPopoverSingle(title, rows, x, y){ popTitle.textContent=title; popHead.innerHTML="<tr><th>Customer</th><th>Hours</th></tr>"; popBody.innerHTML=(rows&&rows.length)? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join(''):`<tr><td colspan="2">No data</td></tr>`; placePopoverAt(x,y); }
-function mergeConfirmedPotential(bc, bp){ const map=new Map(); (bc||[]).forEach(r=>{ map.set(r.customer, {customer:r.customer, conf:(r.hours||0), pot:0}); }); (bp||[]).forEach(r=>{ if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0);} else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)});} }); const rows=Array.from(map.values()).map(x=>({...x,total:(x.conf+x.pot)})); rows.sort((a,b)=>b.total-a.total); return rows; }
-function openPopoverCombined(title, rows, x, y){ popTitle.textContent=title; popHead.innerHTML="<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>"; popBody.innerHTML=(rows&&rows.length)? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join(''):`<tr><td colspan="4">No data</td></tr>`; placePopoverAt(x,y); }
 
-// ------- WHAT-IF -------
+function placePopoverAt(x, y){
+  pop.style.display='block'; // to get size
+  const rect = pop.getBoundingClientRect();
+  const pad = 12;
+  const vw = window.innerWidth; const vh = window.innerHeight;
+  let left = x + 14; // offset a bit to the right of cursor
+  let top  = y - 10;
+  if (left + rect.width + pad > vw) left = vw - rect.width - pad;
+  if (top + rect.height + pad > vh) top = vh - rect.height - pad;
+  if (top < pad) top = pad;
+  if (left < pad) left = pad;
+  pop.style.left = left + "px";
+  pop.style.top  = top  + "px";
+}
+function openPopoverSingle(title, rows, x, y){
+  popTitle.textContent = title;
+  popHead.innerHTML = "<tr><th>Customer</th><th>Hours</th></tr>";
+  popBody.innerHTML = (rows&&rows.length)
+    ? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join('')
+    : `<tr><td colspan="2">No data</td></tr>`;
+  placePopoverAt(x, y);
+}
+function mergeConfirmedPotential(bc, bp){
+  const map = new Map();
+  (bc||[]).forEach(r=>{
+    map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0});
+  });
+  (bp||[]).forEach(r=>{
+    if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0); }
+    else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)}); }
+  });
+  const rows = Array.from(map.values()).map(x=>({ ...x, total: (x.conf + x.pot) }));
+  rows.sort((a,b)=> b.total - a.total);
+  return rows;
+}
+function openPopoverCombined(title, rows, x, y){
+  popTitle.textContent = title;
+  popHead.innerHTML = "<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>";
+  if(rows&&rows.length){
+    popBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('');
+  } else {
+    popBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
+  }
+  placePopoverAt(x, y);
+}
+
+// ------- WHAT-IF SCHEDULE IMPACT (incl. MANUAL) -------
 const impactSource = document.getElementById('impactSource');
 const impactProjectSel = document.getElementById('impactProject');
-const impactProjWrap = document.getElementById('impactProjWrap');
+const impactProjectWrap = document.getElementById('impactProjectWrap');
 const impactMult = document.getElementById('impactMult');
 const impactLead = document.getElementById('impactLead');
 const impactOT = document.getElementById('impactOT');
-const impactTarget = document.getElementById('impactTarget');
+const impactTarget = document.getElementById('impactTarget'); // reserved for future logic
 const impactInd = document.getElementById('impactInd');
 const impactDel = document.getElementById('impactDel');
 const impactRun = document.getElementById('impactRun');
 const impactClear = document.getElementById('impactClear');
 const impactResult = document.getElementById('impactResult');
 
-const manualPanel = document.getElementById('manualPanel');
-const manualHours = document.getElementById('manualHours');
+const manualContainer = document.getElementById('manualContainer');
+const mNumber = document.getElementById('mNumber');
+const mCustomer = document.getElementById('mCustomer');
+const mInd = document.getElementById('mInd');
+const mDel = document.getElementById('mDel');
+const manualHoursGrid = document.getElementById('manualHoursGrid');
 
-function fmtDateInput(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
-function addWorkdays(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1 && dow<=5) left--; } return t; }
-function maxDate(a,b){ return (a>b)?a:b; }
+// inject discipline hour fields (uniform style)
+function buildManualHours(){
+  manualHoursGrid.innerHTML = "";
+  (departmentCapacities||[]).forEach(d=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'f';
+    wrap.innerHTML = `
+      <label>${d.name} (hrs)
+        <input id="mhours_${d.key}" type="number" min="0" step="1" value="0">
+      </label>
+    `;
+    manualHoursGrid.appendChild(wrap);
+  });
+}
+buildManualHours();
+
+// keep manual dates in sync with override dates
+mInd.addEventListener('change', ()=>{ impactInd.value = mInd.value; });
+mDel.addEventListener('change', ()=>{ impactDel.value = mDel.value; });
+
+// project list population for non-manual sources
 function impactSourceProjects(){
-  const src=impactSource.value;
-  if(src==='manual'){
-    const m={ number:document.getElementById('m_number').value||'P-Manual', customer:document.getElementById('m_customer').value||'Manual', aircraftModel:document.getElementById('m_aircraft').value||'', scope:document.getElementById('m_scope').value||'What-If', induction:document.getElementById('m_ind').value||fmtDateInput(new Date()), delivery:document.getElementById('m_del').value||fmtDateInput(addWorkdays(new Date(),10)) };
-    departmentCapacities.forEach(d=>{ const v=parseFloat(document.getElementById('mh_'+d.key).value||'0')||0; m[d.key]=v; });
-    return [m];
-  }
-  return (src==='potential')?potentialProjects:projects;
+  const src = impactSource.value;
+  return (src==='potential') ? potentialProjects : projects;
 }
 function setImpactProjects(){
-  const src=impactSource.value;
-  if(src==='manual'){
-    impactProjWrap.style.display='none';
-    manualPanel.style.display='block';
+  const arr = impactSourceProjects();
+  impactProjectSel.innerHTML = "";
+  arr.forEach((p, i)=>{
+    const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+    const opt = document.createElement('option');
+    opt.value = String(i); opt.textContent = label;
+    impactProjectSel.appendChild(opt);
+  });
+  if(arr.length){
+    const p = arr[0];
+    if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
+    if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
   } else {
-    impactProjWrap.style.display='block';
-    manualPanel.style.display='none';
-    const arr=impactSourceProjects();
-    impactProjectSel.innerHTML="";
-    arr.forEach((p,i)=>{ const opt=document.createElement('option'); opt.value=String(i); opt.textContent=`${p.number||'—'} — ${p.customer||'Unknown'}`; impactProjectSel.appendChild(opt); });
-    if(arr.length){ const p=arr[0]; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); } else { impactInd.value=""; impactDel.value=""; }
+    impactInd.value = ""; impactDel.value = "";
   }
 }
-impactSource.addEventListener('change', setImpactProjects);
-(function initManualHours(){ let html=""; departmentCapacities.forEach(d=>{ html += `<label>${d.name} hours<input id="mh_${d.key}" type="number" step="1" value="0"></label>`; }); manualHours.innerHTML=html; document.getElementById('m_ind').value=fmtDateInput(new Date()); document.getElementById('m_del').value=fmtDateInput(addWorkdays(new Date(),10)); })();
-impactProjectSel.addEventListener('change', ()=>{ const arr=impactSourceProjects(); const p=arr[Number(impactProjectSel.value)||0]; if(!p) return; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); });
-setImpactProjects();
 
-function capPerDay(key, otPct){ const dept=departmentCapacities.find(x=>x.key===key); const perWeek=(dept?.headcount||0)*HOURS_PER_FTE*PRODUCTIVITY_FACTOR; const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; return (perWeek*uplift)/5.0; }
-function baselineSeries(period, key){ const mapC=(period==='weekly')?dataWConfirmed:dataMConfirmed; return (mapC[key]?.series||[]).slice(); }
+// toggle manual UI visibility and normalize font/box alignment
+function toggleManualUI(){
+  const mode = impactSource.value;
+  if(mode === 'manual'){
+    manualContainer.style.display = 'block';
+    impactProjectWrap.style.display = 'none';
+    // default manual dates if empty
+    if(!mInd.value){ const t=new Date(); mInd.value = ymd(t); impactInd.value = mInd.value; }
+    if(!mDel.value){ const t=new Date(); t.setDate(t.getDate()+7); mDel.value = ymd(t); impactDel.value = mDel.value; }
+  } else {
+    manualContainer.style.display = 'none';
+    impactProjectWrap.style.display = 'block';
+  }
+  if(mode !== 'manual'){ setImpactProjects(); }
+}
+impactSource.addEventListener('change', toggleManualUI);
+impactProjectSel.addEventListener('change', ()=>{
+  const arr = impactSourceProjects();
+  const p = arr[Number(impactProjectSel.value)||0];
+  if(!p) return;
+  if(p?.induction) impactInd.value = String(p.induction).slice(0,10);
+  if(p?.delivery)  impactDel.value = String(p.delivery).slice(0,10);
+});
+toggleManualUI(); // init for default selection
+
+function fmtDateInput(d){
+  const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${da}`;
+}
+function addWorkdays(d, n){
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let left = Math.max(0, Math.floor(n));
+  while(left>0){
+    t.setDate(t.getDate()+1);
+    const dow=t.getDay(); if(dow>=1 && dow<=5) left--;
+  }
+  return t;
+}
+function maxDate(a,b){ return (a>b) ? a : b; }
+function minDate(a,b){ return (a<b) ? a : b; }
+
+function capPerDay(key, overtimePct){
+  const dept = departmentCapacities.find(x=>x.key===key);
+  const perWeek = (dept?.headcount||0) * HOURS_PER_FTE * PRODUCTIVITY_FACTOR;
+  const uplift = 1 + Math.max(0, (parseFloat(overtimePct)||0))/100;
+  return (perWeek * uplift) / 5.0;
+}
+function baselineSeries(period, key){
+  const mapC = (period==='weekly') ? dataWConfirmed : dataMConfirmed;
+  return (mapC[key]?.series || []).slice();
+}
 function periodRange(period, labels, start, end){
   let s=-1, e=-1;
   for(let i=0;i<labels.length;i++){
     const L=parseDateLocalISO(labels[i]);
-    const Pstart=(period==='weekly')?mondayOf(L):firstOfMonth(L);
-    const Pend=(period==='weekly')?new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6):lastOfMonth(L);
+    const Pstart = (period==='weekly') ? mondayOf(L) : firstOfMonth(L);
+    const Pend   = (period==='weekly') ? new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6) : lastOfMonth(L);
     if(s===-1 && Pend>=start) s=i;
     if(Pstart<=end) e=i;
   }
-  if(s===-1 || e===-1 || e<s) return null; return {s,e};
+  if(s===-1 || e===-1 || e<s) return null;
+  return {s,e};
 }
-function sumHeadroom(period, key, start, end, otPct){
-  const labels=(period==='weekly')?weekLabels:monthLabels; const cap=capacityArray(key, labels, period); const base=baselineSeries(period, key); const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; const rng=periodRange(period, labels, start, end); if(!rng) return 0; let sum=0; for(let i=rng.s;i<=rng.e;i++){ const hr=Math.max(0, cap[i]*uplift - (base[i]||0)); sum += hr; } return sum;
+function projectHoursSeries(period, key, proj, mult, labels){
+  const total = new Array(labels.length).fill(0);
+  const hrs = (proj[key]||0) * (mult||1);
+  if(hrs<=0) return total;
+
+  const a = parseDateLocalISO(proj.induction);
+  const b = parseDateLocalISO(proj.delivery);
+  if(isNaN(a)||isNaN(b) || b<a) return total;
+
+  if(period==='weekly'){
+    const rng = periodRange('weekly', labels, a, b);
+    if(!rng) return total;
+    const n = rng.e - rng.s + 1; const per = hrs / n;
+    for(let i=rng.s;i<=rng.e;i++){ total[i]+=per; }
+  } else {
+    for(let i=0;i<labels.length;i++){
+      const mStart=parseDateLocalISO(labels[i]);
+      const mEnd=lastOfMonth(mStart);
+      const ovS = maxDate(mStart, a), ovE = minDate(mEnd, b);
+      if(ovE>=ovS){
+        const projWD = workdaysInclusive(a,b);
+        const monWD  = workdaysInclusive(ovS,ovE);
+        const share  = projWD>0 ? (monWD/projWD) : 0;
+        total[i] += hrs*share;
+      }
+    }
+  }
+  return total;
 }
+function sumHeadroom(period, key, start, end, overtimePct){
+  const labels = (period==='weekly') ? weekLabels : monthLabels;
+  const cap = capacityArray(key, labels, period);
+  const base = baselineSeries(period, key);
+  const uplift = 1 + Math.max(0,(parseFloat(overtimePct)||0))/100;
+  const rng = periodRange(period, labels, start, end);
+  if(!rng) return 0;
+  let sum = 0;
+  for(let i=rng.s;i<=rng.e;i++){
+    const hr = Math.max(0, cap[i]*uplift - (base[i]||0));
+    sum += hr;
+  }
+  return sum;
+}
+
 function renderImpactResult(obj){
   const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
-  const dfmt=d=>{ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; };
+  const dfmt = d=>fmtDateInput(d);
   let html = `
     <div><strong>Earliest allowable induction:</strong> ${dfmt(earliestStart)}</div>
     <div><strong>Requested induction:</strong> ${dfmt(targetStart)}</div>
@@ -854,230 +1052,116 @@ function renderImpactResult(obj){
     </table>
   `;
   impactResult.innerHTML = html;
-  const monthly=(currentPeriod==='monthly');
-  const startLbl = monthly ? ymd(firstOfMonth(earliestStart)) : ymd(mondayOf(earliestStart));
-  const endLbl   = monthly ? ymd(firstOfMonth(newEnd))       : ymd(mondayOf(newEnd));
-  chart.options.plugins.annotation.annotations.whatIfStart = { type:'line', xMin:startLbl, xMax:startLbl, borderColor:'#2563eb', borderWidth:2, label:{display:true, content:'What-If Start', position:'start', backgroundColor:'rgba(37,99,235,0.1)', color:'#2563eb'} };
-  chart.options.plugins.annotation.annotations.whatIfEnd   = { type:'line', xMin:endLbl,   xMax:endLbl,   borderColor:'#7c3aed', borderWidth:2, label:{display:true, content:'What-If End',   position:'end',   backgroundColor:'rgba(124,58,237,0.1)', color:'#7c3aed'} };
+
+  // annotate on main chart
+  const startLbl = (currentPeriod==='weekly') ? ymd(mondayOf(earliestStart)) : ymd(firstOfMonth(earliestStart));
+  const endLbl   = (currentPeriod==='weekly') ? ymd(mondayOf(newEnd))       : ymd(firstOfMonth(newEnd));
+  chart.options.plugins.annotation.annotations.whatIfStart = {
+    type:'line', xMin:startLbl, xMax:startLbl, borderColor:'#2563eb', borderWidth:2,
+    label:{display:true, content:'What-If Start', position:'start', backgroundColor:'rgba(37,99,235,0.1)', color:'#2563eb'}
+  };
+  chart.options.plugins.annotation.annotations.whatIfEnd = {
+    type:'line', xMin=endLbl, xMax=endLbl, borderColor:'#7c3aed', borderWidth:2,
+    label:{display:true, content:'What-If End', position:'end', backgroundColor:'rgba(124,58,237,0.1)', color:'#7c3aed'}
+  };
   chart.update();
 }
-impactRun.addEventListener('click', ()=>{
-  const arr = impactSourceProjects();
-  const idx = (impactSource.value==='manual') ? 0 : (Number(impactProjectSel.value)||0);
-  const proj = arr[idx]; if(!proj){ impactResult.textContent="No project selected."; return; }
 
+impactRun.addEventListener('click', ()=>{
+  const mode = impactSource.value;
+
+  // build the project record depending on mode
+  let proj = null;
+  if(mode === 'manual'){
+    proj = { number: mNumber.value || 'MAN-001', customer: mCustomer.value || 'Customer' };
+    // dates come from Manual inputs; also mirror into override fields for transparency
+    proj.induction = mInd.value; proj.delivery = mDel.value;
+    impactInd.value = proj.induction; impactDel.value = proj.delivery;
+
+    // discipline hours
+    departmentCapacities.forEach(d=>{
+      const el = document.getElementById('mhours_'+d.key);
+      proj[d.key] = parseFloat(el?.value || '0') || 0;
+    });
+  } else {
+    const arr = impactSourceProjects();
+    const idx = Number(impactProjectSel.value)||0;
+    proj = arr[idx];
+  }
+
+  if(!proj){ impactResult.textContent = "No project selected."; return; }
+
+  // allow multiplier & overrides
   const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
   const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
   const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
 
+  // overrides (if provided)
   const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
   const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
-  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){ impactResult.textContent="Invalid induction/delivery dates."; return; }
 
-  const today = new Date(); const leadReady = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(today, minLead);
-  const earliestStart = (rawStart>leadReady)?rawStart:leadReady;
-  const targetStart = rawStart, targetEnd = rawEnd;
+  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){
+    impactResult.textContent = "Invalid induction/delivery dates."; return;
+  }
 
-  const rows=[]; let overallSlip=0;
+  const today = new Date();
+  const leadReady = addWorkdays(today, minLead);
+  const earliestStart = maxDate(rawStart, leadReady);
+  const targetStart = rawStart;
+  const targetEnd   = rawEnd;
+
+  const rows = [];
+  let overallSlip = 0;
+
   departmentCapacities.forEach(d=>{
-    const key=d.key, name=d.name; const capDay=capPerDay(key, otPct); const H=(proj[key]||0)*mult; const head=sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct); const short=Math.max(0, H-head); const slip=(short>0 && capDay>0)?Math.ceil(short/capDay):0; overallSlip=Math.max(overallSlip, slip); rows.push({name,h:H,head,short,slip});
-  });
-  const newEnd = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(targetEnd, overallSlip);
+    const key = d.key;
+    const name = d.name;
+    const capDay = capPerDay(key, otPct);
+    const H = (proj[key]||0)*mult;
+    const head = sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct);
+    let short = Math.max(0, H - head);
+    let slip = (short>0 && capDay>0) ? Math.ceil(short / capDay) : 0;
 
-  renderImpactResult({ earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows });
+    overallSlip = Math.max(overallSlip, slip);
+    rows.push({name, h:H, head, short, slip});
+  });
+
+  const newEnd = addWorkdays(targetEnd, overallSlip);
+
+  renderImpactResult({
+    earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows
+  });
 });
-impactClear.addEventListener('click', ()=>{ impactResult.innerHTML=""; if(chart?.options?.plugins?.annotation?.annotations){ delete chart.options.plugins.annotation.annotations.whatIfStart; delete chart.options.plugins.annotation.annotations.whatIfEnd; chart.update(); } });
 
-// -------------------- Snapshot (ECharts Sankey + Treemap, Chart.js Pareto) --------------------
-let sankeyE=null, treemapE=null, paretoChart=null;
-const snapConfirmed=document.getElementById('snapConfirmed');
-const snapPotential=document.getElementById('snapPotential');
-const snapTopN=document.getElementById('snapTopN');
-const snapTopNVal=document.getElementById('snapTopNVal');
-snapConfirmed.addEventListener('change', rebuildSnapshot);
-snapPotential.addEventListener('change', rebuildSnapshot);
-snapTopN.addEventListener('input', ()=>{ snapTopNVal.textContent=snapTopN.value; rebuildSnapshot(); });
+impactClear.addEventListener('click', ()=>{
+  // clear annotations and result
+  delete chart.options.plugins.annotation.annotations.whatIfStart;
+  delete chart.options.plugins.annotation.annotations.whatIfEnd;
+  chart.update();
+  impactResult.innerHTML = "";
+});
 
-const keyColor={ confirmed:getComputedStyle(document.documentElement).getPropertyValue('--confirmed').trim()||'#2563eb', potential:getComputedStyle(document.documentElement).getPropertyValue('--potential2').trim()||'#059669' };
-
-function gatherSnapshotBreakdown(){
-  const includeC=snapConfirmed.checked, includeP=snapPotential.checked;
-  const mapC=dataMap('c')[currentKey]?.breakdown||[];
-  const mapP=dataMap('p')[currentKey]?.breakdown||[];
-
-  const totalByProj = new Map();
-  const byStatus=[]; // {label, status, hours}
-
-  function addSet(breakArr, status){
-    for(let i=0;i<breakArr.length;i++){
-      const rows=breakArr[i]||[];
-      rows.forEach(r=>{
-        const key=r.label||r.customer; const v=r.hours||0;
-        totalByProj.set(key, (totalByProj.get(key)||0)+v);
-        byStatus.push({label:key, status, hours:v});
-      });
-    }
-  }
-  if(includeC) addSet(mapC, 'confirmed');
-  if(includeP) addSet(mapP, 'potential');
-
-  const aggStatus=new Map();
-  byStatus.forEach(x=>{ const k=x.label+'|'+x.status; aggStatus.set(k, (aggStatus.get(k)||0)+(x.hours||0)); });
-  const aggStatusRows=Array.from(aggStatus.entries()).map(([k,v])=>{ const [label,status]=k.split('|'); return {label,status,hours:v}; });
-
-  const total=Array.from(totalByProj.values()).reduce((a,b)=>a+b,0);
-  return { totalByProj:Object.fromEntries(totalByProj), byStatus:aggStatusRows, total };
-}
-
-function rebuildSnapshot(){
-  const sankeyDiv=document.getElementById('sankeyDiv');
-  const treemapDiv=document.getElementById('treemapDiv');
-  const paretoCtx=document.getElementById('paretoCanvas').getContext('2d');
-
-  if(sankeyE){ sankeyE.dispose(); sankeyE=null; }
-  if(treemapE){ treemapE.dispose(); treemapE=null; }
-  if(paretoChart){ paretoChart.destroy(); paretoChart=null; }
-
-  const deptName=(dataMap('c')[currentKey]?.name)||'Dept';
-  const { totalByProj, byStatus, total } = gatherSnapshotBreakdown();
-
-  // Top N grouping
-  const N=parseInt(snapTopN.value||'8',10);
-  const pairs=Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
-  const top=pairs.slice(0,N);
-  const rest=pairs.slice(N);
-  const topSet=new Set(top.map(p=>p[0]));
-  const restSum=rest.reduce((a,[,v])=>a+v,0);
-
-  // Sankey data (project nodes split by status for clear coloring)
-  const nodesMap=new Map();
-  function addNode(name, color){ if(!nodesMap.has(name)) nodesMap.set(name, {name, itemStyle:{color}}); }
-  const targetNode = deptName;
-  addNode(targetNode, '#6b7280');
-
-  const links=[];
-  byStatus.forEach(r=>{
-    const proj = topSet.has(r.label) ? r.label : 'Other';
-    if(proj==='Other' && restSum===0) return;
-    const suffix = r.status==='confirmed' ? ' (C)' : ' (P)';
-    const source = proj + suffix;
-    addNode(source, r.status==='confirmed' ? keyColor.confirmed : keyColor.potential);
-    links.push({ source, target: targetNode, value: +r.hours });
-  });
-  if(links.length===0){
-    sankeyE = echarts.init(sankeyDiv);
-    sankeyE.setOption({ title:{text:'No data', left:'center', top:'middle'} });
-  } else {
-    sankeyE = echarts.init(sankeyDiv);
-    sankeyE.setOption({
-      tooltip:{ formatter: (p)=> {
-        if(p.dataType==='edge'){
-          const v=p.data.value; const pct= total>0 ? (v/total*100).toFixed(1) : '0.0';
-          return `${p.data.source} → ${p.data.target}<br/><b>${v.toFixed(1)} hrs</b> (${pct}%)`;
-        }
-        return p.name;
-      }},
-      series:[{
-        type:'sankey',
-        data:Array.from(nodesMap.values()),
-        links:links,
-        lineStyle:{ color:'source', curveness:0.5 },
-        emphasis:{ focus:'adjacency' },
-        nodeGap:14,
-        nodeWidth:16,
-        draggable:true,
-        label:{ color:'#111827', fontSize:12 }
-      }]
-    });
-  }
-
-  // Treemap data (group by status buckets)
-  const groups = [];
-  const includeC = snapConfirmed.checked, includeP=snapPotential.checked;
-
-  function buildChildren(status, color){
-    // build per-project values limited to topN; remainder as Other
-    const valByProj=new Map();
-    byStatus.filter(x=>x.status===status).forEach(x=>{
-      const proj = topSet.has(x.label) ? x.label : 'Other';
-      valByProj.set(proj, (valByProj.get(proj)||0) + x.hours);
-    });
-    if(valByProj.size===0) return null;
-    const children=[];
-    Array.from(valByProj.entries()).forEach(([label, v])=>{
-      if(label==='Other' && v<=0) return;
-      children.push({
-        name: label,
-        value: +v,
-        itemStyle:{ color: color }
-      });
-    });
-    return children;
-  }
-
-  const cChildren = includeC ? buildChildren('confirmed', keyColor.confirmed) : null;
-  const pChildren = includeP ? buildChildren('potential', keyColor.potential) : null;
-
-  if(cChildren && cChildren.length) groups.push({ name:'Confirmed', children:cChildren });
-  if(pChildren && pChildren.length) groups.push({ name:'Potential', children:pChildren });
-
-  if(groups.length===0){
-    treemapE = echarts.init(treemapDiv);
-    treemapE.setOption({ title:{text:'No data', left:'center', top:'middle'} });
-  } else {
-    treemapE = echarts.init(treemapDiv);
-    treemapE.setOption({
-      tooltip:{ formatter:(p)=> `${p.name}: <b>${(+p.value).toFixed(1)} hrs</b>${ total>0? ` (${(p.value/total*100).toFixed(1)}%)` : ''}` },
-      series:[{
-        type:'treemap',
-        roam:false,
-        nodeClick:'zoomToNode',
-        breadcrumb:{ show:false },
-        data: groups,
-        label:{ show:true, formatter:(p)=>{
-          const v=+p.value||0; const pct= total>0 ? Math.round(v/total*100) : 0;
-          return `${p.name}\n${v.toFixed(0)} hrs • ${pct}%`;
-        }}
-      }]
-    });
-  }
-
-  // Pareto (Chart.js)
-  const pairsAll=Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
-  const labels=pairsAll.map(p=>p[0]);
-  const vals=pairsAll.map(p=>p[1]);
-  const cum=[]; let running=0;
-  vals.forEach(v=>{ running+=v; cum.push(total>0?(running/total*100):0); });
-  paretoChart = new Chart(paretoCtx, {
-    type:'bar',
-    data:{ labels, datasets:[
-      { label:'Hours', data:vals, borderWidth:0, backgroundColor:'#9CA3AF' },
-      { label:'Cumulative %', data:cum, type:'line', yAxisID:'y2', borderColor:'#111827', backgroundColor:'rgba(17,24,39,0.1)', tension:0.2, pointRadius:2 }
-    ]},
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      scales:{ y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
-               y2:{ position:'right', beginAtZero:true, suggestedMax:100, ticks:{callback:(v)=>`${v}%`}, grid:{drawOnChartArea:false} } },
-      plugins:{ legend:{display:false} }
-    }
-  });
-
-  // Resize handlers
-  window.addEventListener('resize', ()=>{ if(sankeyE) sankeyE.resize(); if(treemapE) treemapE.resize(); });
-}
-
-// ---------- Event listeners ----------
-sel.addEventListener('change', e=>{ currentKey=e.target.value; refreshDatasets(); });
-chkPot.addEventListener('change', e=>{ showPotential=e.target.checked; refreshDatasets(); });
-chkAct.addEventListener('change', e=>{ showActual=e.target.checked; refreshDatasets(); });
-prodSlider.addEventListener('input', e=>{ PRODUCTIVITY_FACTOR=parseFloat(e.target.value||'0.85'); prodVal.textContent=PRODUCTIVITY_FACTOR.toFixed(2); refreshDatasets(); });
-hoursInput.addEventListener('change', e=>{ const v=parseInt(e.target.value||'40',10); HOURS_PER_FTE=isNaN(v)?40:Math.min(60,Math.max(30,v)); e.target.value=HOURS_PER_FTE; refreshDatasets(); });
-periodSel.addEventListener('change', e=>{ currentPeriod=e.target.value; refreshDatasets(); });
-utilSepChk.addEventListener('change', e=>{ utilSeparate=e.target.checked; rebuildUtilChart(); });
-
-// ---------- Initial render ----------
+// initial render
 refreshDatasets();
 rebuildUtilChart();
+
+// ---- optional auto-resize to fit content (helps when panels expand) ----
+(function () {
+  function setH() {
+    var h = document.documentElement.scrollHeight || document.body.scrollHeight || 2000;
+    if (window.parent) {
+      try {
+        window.parent.postMessage({ type: "streamlit:setFrameHeight", height: h }, "*");
+      } catch (e) {}
+    }
+    if (window.Streamlit && window.Streamlit.setFrameHeight) {
+      window.Streamlit.setFrameHeight(h);
+    }
+  }
+  new ResizeObserver(setH).observe(document.body);
+  window.addEventListener("load", setH);
+  setTimeout(setH, 400);
+})();
 </script>
 </body>
 </html>
@@ -1092,4 +1176,5 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-components.html(html_code, height=2600, scrolling=False)
+# Tall iframe; allow inner scrolling (adjust as needed)
+components.html(html_code, height=2600, scrolling=True)
