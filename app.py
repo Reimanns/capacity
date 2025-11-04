@@ -1053,33 +1053,7 @@ function gatherSnapshotBreakdown(){
   return { totalByProj:Object.fromEntries(totalByProj), byStatus:aggStatusRows, total };
 }
 
-  function includeIndex(i){
-    if (!from || !to || isNaN(from) || isNaN(to)) return true;
-    const {start, end} = periodBoundsForIndex(i);
-    return !(end < from || start > to);
-  }
-
-  function addSet(breakArr, status){
-    for(let i=0;i<breakArr.length;i++){
-      if (!includeIndex(i)) continue;
-      const rows=breakArr[i]||[];
-      rows.forEach(r=>{
-        const key=r.label||r.customer; const v=r.hours||0;
-        totalByProj.set(key, (totalByProj.get(key)||0)+v);
-        byStatus.push({label:key, status, hours:v});
-      });
-    }
-  }
-  if(includeC) addSet(mapC, 'confirmed');
-  if(includeP) addSet(mapP, 'potential');
-
-  const aggStatus=new Map();
-  byStatus.forEach(x=>{ const k=x.label+'|'+x.status; aggStatus.set(k, (aggStatus.get(k)||0)+(x.hours||0)); });
-  const aggStatusRows=Array.from(aggStatus.entries()).map(([k,v])=>{ const [label,status]=k.split('|'); return {label,status,hours:v}; });
-
-  const total=Array.from(totalByProj.values()).reduce((a,b)=>a+b,0);
-  return { totalByProj:Object.fromEntries(totalByProj), byStatus:aggStatusRows, total };
-}
+ 
 
 function rebuildSnapshot(){
   const sankeyDiv=document.getElementById('sankeyDiv');
