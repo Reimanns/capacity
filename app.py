@@ -1177,4 +1177,5 @@ html_code = (
 )
 
 # Tall iframe; allow inner scrolling (adjust as needed)
-components.html(html_code, height=2600, scrolling=True)
+components.html(html_code, height=2600, scrolling=False)
+
