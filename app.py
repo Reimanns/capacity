@@ -137,11 +137,20 @@ html_template = """
 <head>
   <meta charset="UTF-8" />
   <title>Labor Capacity Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <!-- Sankey & Treemap plugins -->
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@3"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2"></script>
+
+  <!-- Chart libs (UMD builds) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.2/dist/chartjs-plugin-annotation.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@3.0.0/dist/chartjs-chart-sankey.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.1/dist/chartjs-chart-treemap.min.js"></script>
+
+  <!-- Defensive registration -->
+  <script>
+    try { if (window['chartjs-plugin-annotation']) { Chart.register(window['chartjs-plugin-annotation']); } } catch(e) {}
+    try { const s = window['chartjs-chart-sankey']; if (s?.SankeyController && s?.Flow) { Chart.register(s.SankeyController, s.Flow); } } catch(e) {}
+    try { const t = window['chartjs-chart-treemap']; if (t?.TreemapController && t?.TreemapElement) { Chart.register(t.TreemapController, t.TreemapElement); } } catch(e) {}
+  </script>
+
   <style>
     :root{
       --brand:#003366; --brand-20: rgba(0,51,102,0.2);
@@ -149,6 +158,8 @@ html_template = """
       --potential:#2e7d32; --potential-20: rgba(46,125,50,0.2);
       --actual:#ef6c00; --actual-20: rgba(239,108,0,0.2);
       --muted:#6b7280;
+      --confirmed:#2563eb;
+      --potential2:#059669;
     }
     html, body { height:100%; }
     body { font-family: Arial, sans-serif; margin: 8px 14px 24px; overflow-x:hidden; }
@@ -189,24 +200,23 @@ html_template = """
     details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
     details.impact summary{ cursor:pointer; font-weight:600; }
 
-    /* Manual project (appears only when Manual is selected) */
-    .manual-wrap { border:1px dashed #e5e7eb; border-radius:10px; padding:10px; background:#fff; margin-top:8px; display:none; }
-    .manual-grid { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(110px,1fr)); }
+    /* Manual project sub-panel */
+    .manual-panel { display:none; border:1px dashed #cbd5e1; border-radius:10px; padding:10px; background:#fff; }
+    .manual-grid { display:grid; gap:10px; grid-template-columns: repeat(6, minmax(120px,1fr)); margin-top:8px; }
     .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
-    .manual-hours { display:grid; gap:6px; grid-template-columns: repeat(6, minmax(110px,1fr)); margin-top:6px; }
+    .manual-hours { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(100px,1fr)); margin-top:10px; }
 
-    /* Snapshot section */
-    details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:12px 0 10px; }
+    /* Snapshot breakdown */
+    details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
     details.snapshot summary{ cursor:pointer; font-weight:600; }
-    .snap-controls { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:8px 0 10px; }
-    .snap-controls label{ font-size:12px; display:flex; align-items:center; gap:6px; }
-    .snap-grid { display:grid; grid-template-columns: 1.2fr 0.8fr; gap:12px; align-items:stretch; }
-    .snap-grid .right { display:grid; grid-template-rows: 1fr 1fr; gap:12px; }
-    .canvas-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:8px; height:100%; }
-    .canvas-card h4 { margin:4px 6px 8px; font-size:14px; color:#374151; }
-    .legend { display:flex; gap:14px; align-items:center; margin: 0 0 6px 6px; }
-    .chip { display:inline-flex; align-items:center; gap:6px; }
-    .swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }
+    .snap-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+    .snap-grid { display:grid; gap:10px; grid-template-columns: repeat(3, minmax(250px,1fr)); }
+    .snap-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; height:360px; }
+    .snap-card h4 { margin:0 0 6px 0; font-size:14px; color:#111827; }
+    .snap-legend { font-size:12px; color:#374151; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:4px 0 6px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; }
+    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
+
   </style>
 </head>
 <body>
@@ -256,9 +266,11 @@ html_template = """
         <option value="manual">Manual</option>
       </select>
     </label>
-    <label>Project
+
+    <label id="impactProjWrap">Project
       <select id="impactProject"></select>
     </label>
+
     <label>Scope multiplier
       <input id="impactMult" type="number" step="0.05" value="1.00">
     </label>
@@ -283,10 +295,31 @@ html_template = """
     <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
   </div>
 
-  <!-- Manual project fields (hidden unless Manual is selected) -->
-  <div id="manualWrap" class="manual-wrap">
-    <div class="manual-grid" id="manualTop"></div>
-    <div class="manual-hours" id="manualHours"></div>
+  <!-- Manual project details (shown only when source = Manual) -->
+  <div class="manual-panel" id="manualPanel">
+    <div class="manual-grid">
+      <label>Project Number
+        <input id="m_number" type="text" value="P-Manual">
+      </label>
+      <label>Customer
+        <input id="m_customer" type="text" value="Manual">
+      </label>
+      <label>Aircraft Model
+        <input id="m_aircraft" type="text" value="">
+      </label>
+      <label>Scope
+        <input id="m_scope" type="text" value="What-If">
+      </label>
+      <label>Induction
+        <input id="m_ind" type="date">
+      </label>
+      <label>Delivery
+        <input id="m_del" type="date">
+      </label>
+    </div>
+    <div class="manual-hours" id="manualHours">
+      <!-- dept hours inputs injected here -->
+    </div>
   </div>
 
   <div id="impactResult" class="impact-box"></div>
@@ -297,35 +330,33 @@ html_template = """
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
-<!-- Snapshot breakdown (Sankey + Treemap + Pareto) -->
-<details class="snapshot">
-  <summary>Snapshot Breakdown (Sankey / Treemap / Pareto)</summary>
+<!-- Snapshot Breakdown (Sankey, Treemap, Pareto) -->
+<details class="snapshot" open>
+  <summary>Snapshot Breakdown (Projects → Dept) &nbsp;—&nbsp; Compare alternatives</summary>
   <div class="snap-controls">
-    <div class="legend">
-      <span class="chip"><span class="swatch" style="background:var(--brand);"></span> Confirmed</span>
-      <span class="chip"><span class="swatch" style="background:var(--potential);"></span> Potential</span>
-    </div>
-    <label><input type="checkbox" id="snapConfirm" checked> Include Confirmed</label>
+    <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
     <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
-    <label><strong>Snapshot period:</strong>
-      <input type="range" id="snapIdx" min="0" max="0" step="1" value="0">
-      <span id="snapLabel">—</span>
+    <label>Top N projects
+      <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
+      <span id="snapTopNVal">8</span>
     </label>
+    <span class="snap-legend">
+      <span class="chip"><span class="dot" style="background:var(--confirmed)"></span> Confirmed</span>
+      <span class="chip"><span class="dot" style="background:var(--potential2)"></span> Potential</span>
+    </span>
   </div>
   <div class="snap-grid">
-    <div class="canvas-card">
-      <h4>Sankey: Projects → Discipline</h4>
-      <canvas id="sankeyCanvas" style="height:520px;"></canvas>
+    <div class="snap-card">
+      <h4>Sankey: Project → Dept (by hours)</h4>
+      <canvas id="sankeyCanvas"></canvas>
     </div>
-    <div class="right">
-      <div class="canvas-card">
-        <h4>Treemap: Project share</h4>
-        <canvas id="treemapCanvas" style="height:250px;"></canvas>
-      </div>
-      <div class="canvas-card">
-        <h4>Pareto: Top contributors</h4>
-        <canvas id="paretoCanvas" style="height:250px;"></canvas>
-      </div>
+    <div class="snap-card">
+      <h4>Treemap: Project contribution</h4>
+      <canvas id="treemapCanvas"></canvas>
+    </div>
+    <div class="snap-card">
+      <h4>Pareto: Top contributors</h4>
+      <canvas id="paretoCanvas"></canvas>
     </div>
   </div>
 </details>
@@ -405,6 +436,9 @@ function getMonthList(){
 }
 
 // -------------------- WEEKLY LOADS --------------------
+function projectLabel(p){
+  return `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+}
 function computeWeeklyLoadsDetailed(arr, key, labels){
   const total=new Array(labels.length).fill(0); const breakdown=labels.map(()=>[]);
   for(const p of arr){
@@ -414,7 +448,7 @@ function computeWeeklyLoadsDetailed(arr, key, labels){
     for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=b) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:per}); }
     }
   }
   return {series:total, breakdown};
@@ -431,7 +465,7 @@ function computeWeeklyLoadsActual(arr, key, labels){
     for(let i=0;i<labels.length;i++){ const L=parseDateLocalISO(labels[i]); if(L>=a && s===-1) s=i; if(L<=end) e=i; }
     if(s!==-1 && e!==-1 && e>=s){
       const n=e-s+1, per=hrs/n;
-      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), hours:per}); }
+      for(let w=s; w<=e; w++){ total[w]+=per; breakdown[w].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:per}); }
     }
   }
   return {series:total, breakdown};
@@ -453,7 +487,7 @@ function computeMonthlyLoadsDetailed(arr, key, monthLabels){
         const overlapWD = workdaysInclusive(overlapStart, overlapEnd);
         const hoursMonth = hrs * (overlapWD / projWD);
         total[i] += hoursMonth;
-        breakdown[i].push({customer:(p.customer||"Unknown"), hours:hoursMonth});
+        breakdown[i].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:hoursMonth});
       }
     }
   }
@@ -477,7 +511,7 @@ function computeMonthlyLoadsActual(arr, key, monthLabels){
         const overlapWD = workdaysInclusive(overlapStart, overlapEnd);
         const hoursMonth = hrs * (overlapWD / projWD);
         total[i] += hoursMonth;
-        breakdown[i].push({customer:(p.customer||"Unknown"), hours:hoursMonth});
+        breakdown[i].push({customer:(p.customer||"Unknown"), label:projectLabel(p), hours:hoursMonth});
       }
     }
   }
@@ -638,18 +672,12 @@ let chart = new Chart(ctx,{
         title = `${labels[idx]} · ${name} · ${isMonthly?'Actual (mo, workdays)':'Actual (wk)'}`;
       } else { return; }
 
+      // anchor popover near click
       const native = evt?.native || evt?.nativeEvent || evt;
       const cx = (native?.clientX ?? 200);
       const cy = (native?.clientY ?? 200);
       if(combined) openPopoverCombined(title, rows, cx, cy);
       else openPopoverSingle(title, rows, cx, cy);
-
-      // Also sync snapshot slider to this index for quick comparison
-      try {
-        document.getElementById('snapIdx').value = String(idx);
-        updateSnapshotUI();
-        rebuildSnapshot();
-      } catch(e){}
     }
   }
 });
@@ -796,14 +824,13 @@ function refreshDatasets(){
     utilChart.update();
   }
 
-  // reset & rebuild snapshot slider + charts
-  resetSnapshotSlider();
+  // also refresh snapshot
   rebuildSnapshot();
 }
 
 // -------------------- LISTENERS --------------------
 sel.addEventListener('change', e=>{ currentKey = e.target.value; refreshDatasets(); });
-chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); rebuildSnapshot(); });
+chkPot.addEventListener('change', e=>{ showPotential = e.target.checked; refreshDatasets(); });
 chkAct.addEventListener('change', e=>{ showActual = e.target.checked; refreshDatasets(); });
 prodSlider.addEventListener('input', e=>{
   PRODUCTIVITY_FACTOR = parseFloat(e.target.value||'0.85'); prodVal.textContent = PRODUCTIVITY_FACTOR.toFixed(2);
@@ -832,11 +859,12 @@ const popBody = document.getElementById('popBody');
 document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
 
 function placePopoverAt(x, y){
-  pop.style.display = 'block';
+  pop.style.display='block'; // ensure visible to get dimensions
   const rect = pop.getBoundingClientRect();
   const pad = 12;
   const vw = window.innerWidth; const vh = window.innerHeight;
-  let left = x + 14, top = y - 10;
+  let left = x + 14; // offset a bit to the right of cursor
+  let top  = y - 10;
   if (left + rect.width + pad > vw) left = vw - rect.width - pad;
   if (top + rect.height + pad > vh) top = vh - rect.height - pad;
   if (top < pad) top = pad;
@@ -854,7 +882,9 @@ function openPopoverSingle(title, rows, x, y){
 }
 function mergeConfirmedPotential(bc, bp){
   const map = new Map();
-  (bc||[]).forEach(r=>{ map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0}); });
+  (bc||[]).forEach(r=>{
+    map.set(r.customer, {customer:r.customer, conf: (r.hours||0), pot: 0});
+  });
   (bp||[]).forEach(r=>{
     if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0); }
     else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)}); }
@@ -866,44 +896,30 @@ function mergeConfirmedPotential(bc, bp){
 function openPopoverCombined(title, rows, x, y){
   popTitle.textContent = title;
   popHead.innerHTML = "<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>";
-  popBody.innerHTML = rows&&rows.length
-    ? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('')
-    : `<tr><td colspan="4">No data</td></tr>`;
+  if(rows&&rows.length){
+    popBody.innerHTML = rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join('');
+  } else {
+    popBody.innerHTML = `<tr><td colspan="4">No data</td></tr>`;
+  }
   placePopoverAt(x, y);
 }
 
 // ------- WHAT-IF SCHEDULE IMPACT -------
 const impactSource = document.getElementById('impactSource');
 const impactProjectSel = document.getElementById('impactProject');
+const impactProjWrap = document.getElementById('impactProjWrap');
 const impactMult = document.getElementById('impactMult');
 const impactLead = document.getElementById('impactLead');
 const impactOT = document.getElementById('impactOT');
-const impactTarget = document.getElementById('impactTarget'); // reserved for future logic
+const impactTarget = document.getElementById('impactTarget'); // reserved
 const impactInd = document.getElementById('impactInd');
 const impactDel = document.getElementById('impactDel');
 const impactRun = document.getElementById('impactRun');
 const impactClear = document.getElementById('impactClear');
 const impactResult = document.getElementById('impactResult');
 
-const manualWrap = document.getElementById('manualWrap');
-const manualTop = document.getElementById('manualTop');
+const manualPanel = document.getElementById('manualPanel');
 const manualHours = document.getElementById('manualHours');
-
-// Build manual inputs (hidden by default)
-function buildManualInputs(){
-  manualTop.innerHTML = `
-    <label>Project Number<input id="manNumber" type="text" value="P-Manual"></label>
-    <label>Customer<input id="manCustomer" type="text" value="Customer"></label>
-    <label>Aircraft Model<input id="manAircraft" type="text" value=""></label>
-    <label>Scope<input id="manScope" type="text" value="Manual What-If"></label>
-    <label>Induction<input id="manInd" type="date" value="${ymd(new Date())}"></label>
-    <label>Delivery<input id="manDel" type="date" value="${ymd(mondayOf(new Date()))}"></label>
-  `;
-  manualHours.innerHTML = departmentCapacities.map(d=>{
-    return `<label>${d.name} (hrs)<input id="man_${d.key}" type="number" step="1" value="0"></label>`;
-  }).join('');
-}
-buildManualInputs();
 
 function fmtDateInput(d){
   const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0');
@@ -923,19 +939,34 @@ function minDate(a,b){ return (a<b) ? a : b; }
 
 function impactSourceProjects(){
   const src = impactSource.value;
-  if (src==='manual') return []; // handled separately
+  if (src==='manual'){
+    // build a single-project array from manual fields
+    const m = {
+      number: document.getElementById('m_number').value || 'P-Manual',
+      customer: document.getElementById('m_customer').value || 'Manual',
+      aircraftModel: document.getElementById('m_aircraft').value || '',
+      scope: document.getElementById('m_scope').value || 'What-If',
+      induction: document.getElementById('m_ind').value || fmtDateInput(new Date()),
+      delivery: document.getElementById('m_del').value || fmtDateInput(addWorkdays(new Date(), 10))
+    };
+    departmentCapacities.forEach(d=>{
+      const v = parseFloat(document.getElementById('mh_'+d.key).value || '0') || 0;
+      m[d.key] = v;
+    });
+    return [m];
+  }
   return (src==='potential') ? potentialProjects : projects;
 }
 function setImpactProjects(){
-  const arr = impactSourceProjects();
-  impactProjectSel.innerHTML = "";
-  if (impactSource.value==='manual'){
-    manualWrap.style.display = 'block';
-    impactProjectSel.disabled = true;
-    impactInd.value = ""; impactDel.value = "";
+  const src = impactSource.value;
+  if (src==='manual'){
+    impactProjWrap.style.display = 'none';
+    manualPanel.style.display = 'block';
   } else {
-    manualWrap.style.display = 'none';
-    impactProjectSel.disabled = false;
+    impactProjWrap.style.display = 'block';
+    manualPanel.style.display = 'none';
+    const arr = impactSourceProjects();
+    impactProjectSel.innerHTML = "";
     arr.forEach((p, i)=>{
       const label = `${p.number || '—'} — ${p.customer || 'Unknown'}`;
       const opt = document.createElement('option');
@@ -952,6 +983,19 @@ function setImpactProjects(){
   }
 }
 impactSource.addEventListener('change', setImpactProjects);
+
+// init manual hours inputs
+(function initManualHours(){
+  let html = "";
+  departmentCapacities.forEach(d=>{
+    html += `<label>${d.name} hours<input id="mh_${d.key}" type="number" step="1" value="0"></label>`;
+  });
+  manualHours.innerHTML = html;
+  // set default manual dates
+  document.getElementById('m_ind').value = fmtDateInput(new Date());
+  document.getElementById('m_del').value = fmtDateInput(addWorkdays(new Date(), 10));
+})();
+
 impactProjectSel.addEventListener('change', ()=>{
   const arr = impactSourceProjects();
   const p = arr[Number(impactProjectSel.value)||0];
@@ -989,7 +1033,7 @@ function periodRange(period, labels, start, end){
   return {s,e};
 }
 
-// Hours by period for the selected project (uniform over workdays/month)
+// Hours by period for the one selected project (uniform over workdays)
 function projectHoursSeries(period, key, proj, mult, labels){
   const total = new Array(labels.length).fill(0);
   const hrs = (proj[key]||0) * (mult||1);
@@ -1074,24 +1118,9 @@ function renderImpactResult(obj){
 }
 
 impactRun.addEventListener('click', ()=>{
-  let proj = null;
-  if (impactSource.value==='manual'){
-    // build from manual inputs
-    proj = { number: document.getElementById('manNumber').value || 'P-Manual',
-             customer: document.getElementById('manCustomer').value || 'Customer',
-             aircraftModel: document.getElementById('manAircraft').value || '',
-             scope: document.getElementById('manScope').value || 'Manual What-If',
-             induction: document.getElementById('manInd').value || ymd(new Date()),
-             delivery:  document.getElementById('manDel').value || ymd(addWorkdays(new Date(), 5)) };
-    departmentCapacities.forEach(d=>{
-      const v = parseFloat(document.getElementById(`man_${d.key}`).value || '0') || 0;
-      proj[d.key] = v;
-    });
-  } else {
-    const arr = impactSourceProjects();
-    const idx = Number(impactProjectSel.value)||0;
-    proj = arr[idx];
-  }
+  const arr = impactSourceProjects();
+  const idx = (impactSource.value==='manual') ? 0 : (Number(impactProjectSel.value)||0);
+  const proj = arr[idx];
   if(!proj){ impactResult.textContent = "No project selected."; return; }
 
   const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
@@ -1139,221 +1168,176 @@ impactRun.addEventListener('click', ()=>{
 
 impactClear.addEventListener('click', ()=>{
   impactResult.innerHTML = "";
-  try {
+  if(chart?.options?.plugins?.annotation?.annotations){
     delete chart.options.plugins.annotation.annotations.whatIfStart;
     delete chart.options.plugins.annotation.annotations.whatIfEnd;
     chart.update();
-  } catch(e){}
+  }
 });
 
-// --------------------- SNAPSHOT (Sankey / Treemap / Pareto) ---------------------
-const snapConfirm = document.getElementById('snapConfirm');
+// -------------------- SNAPSHOT BREAKDOWN --------------------
+let sankeyChart=null, treemapChart=null, paretoChart=null;
+
+const snapConfirmed = document.getElementById('snapConfirmed');
 const snapPotential = document.getElementById('snapPotential');
-const snapIdx = document.getElementById('snapIdx');
-const snapLabel = document.getElementById('snapLabel');
+const snapTopN = document.getElementById('snapTopN');
+const snapTopNVal = document.getElementById('snapTopNVal');
 
-let sankeyChart = null, treemapChart = null, paretoChart = null;
-
-function resetSnapshotSlider(){
-  const labels = currentLabels();
-  snapIdx.min = "0";
-  snapIdx.max = String(Math.max(0, labels.length-1));
-  snapIdx.value = "0";
-  updateSnapshotUI();
-}
-function updateSnapshotUI(){
-  const idx = parseInt(snapIdx.value||"0", 10);
-  const labels = currentLabels();
-  snapLabel.textContent = labels[idx] || "—";
-}
-snapIdx.addEventListener('input', ()=>{ updateSnapshotUI(); rebuildSnapshot(); });
-snapConfirm.addEventListener('change', rebuildSnapshot);
+snapConfirmed.addEventListener('change', rebuildSnapshot);
 snapPotential.addEventListener('change', rebuildSnapshot);
+snapTopN.addEventListener('input', ()=>{ snapTopNVal.textContent = snapTopN.value; rebuildSnapshot(); });
 
-function projLabel(p){
-  const n = (p.number||"—"); const c=(p.customer||"Unknown");
-  let s = `${n} · ${c}`;
-  if (s.length>28) s = s.slice(0,26)+"…";
-  return s;
-}
+const keyColor = {
+  confirmed: getComputedStyle(document.documentElement).getPropertyValue('--confirmed').trim() || '#2563eb',
+  potential: getComputedStyle(document.documentElement).getPropertyValue('--potential2').trim() || '#059669'
+};
 
-// compute snapshot contributions by project for selected period/disc
-function snapshotData(){
-  const labels = currentLabels();
-  const i = parseInt(snapIdx.value||"0",10);
-  const period = currentPeriod;
-  const key = currentKey;
-
-  const includeC = snapConfirm.checked;
+function gatherSnapshotBreakdown(){
+  const includeC = snapConfirmed.checked;
   const includeP = snapPotential.checked;
 
-  let rows = []; // {label, hours, status}
-  let total = 0;
+  const labels = currentLabels();
+  const mapC = dataMap('c')[currentKey]?.breakdown || [];
+  const mapP = dataMap('p')[currentKey]?.breakdown || [];
 
-  function addFrom(arr, status){
-    for(const p of arr){
-      const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
-      if(isNaN(a)||isNaN(b)||b<a) continue;
-      let h = 0;
-      if(period==='weekly'){
-        // match weekly logic: uniform across covered weeks
-        // find s..e week coverage
-        const labs = labels; // weekly
-        let s=-1,e=-1;
-        for(let k=0;k<labs.length;k++){
-          const L=parseDateLocalISO(labs[k]);
-          if(L>=a && s===-1) s=k;
-          if(L<=b) e=k;
-        }
-        if(s!==-1 && e!==-1 && i>=s && i<=e){
-          const n = (e-s+1);
-          h = (p[key]||0) / n;
-        }
-      } else {
-        // monthly: proportion of workdays in overlap of this month
-        const mStart = parseDateLocalISO(labels[i]);
-        const mEnd = lastOfMonth(mStart);
-        const ovS = new Date(Math.max(mStart, a));
-        const ovE = new Date(Math.min(mEnd, b));
-        if(ovE>=ovS){
-          const projWD = Math.max(1, workdaysInclusive(a,b));
-          const monWD  = workdaysInclusive(ovS,ovE);
-          h = (p[key]||0) * (monWD/projWD);
-        }
-      }
-      if(h>0){
-        rows.push({ label: projLabel(p), hours: h, status });
-        total += h;
-      }
+  const totalByProj = new Map();
+  const byStatus = []; // {label, status, hours}
+
+  function addSet(breakArr, status){
+    for(let i=0;i<breakArr.length;i++){
+      const rows = breakArr[i] || [];
+      rows.forEach(r=>{
+        const key = r.label || r.customer; // prefer project label
+        const v = r.hours || 0;
+        totalByProj.set(key, (totalByProj.get(key)||0) + v);
+        byStatus.push({label:key, status, hours:v});
+      });
     }
   }
+  if(includeC) addSet(mapC, 'confirmed');
+  if(includeP) addSet(mapP, 'potential');
 
-  if(includeC) addFrom(projects, 'confirmed');
-  if(includeP) addFrom(potentialProjects, 'potential');
-
-  // group by project label (in case of duplicates)
-  const map = new Map();
-  rows.forEach(r=>{
-    const k = r.label + '|' + r.status;
-    map.set(k, (map.get(k)||0)+r.hours);
+  // aggregate by project for status arrays (summing across periods)
+  const aggStatus = new Map(); // key: label|status
+  byStatus.forEach(x=>{
+    const k = x.label + '|' + x.status;
+    aggStatus.set(k, (aggStatus.get(k)||0) + x.hours);
   });
-
-  const byStatus = Array.from(map.entries()).map(([k,v])=>{
+  const aggStatusRows = Array.from(aggStatus.entries()).map(([k,v])=>{
     const [label, status] = k.split('|');
-    return {label, status, hours: v};
+    return {label, status, hours:v};
   });
 
-  // aggregate by project regardless of status (for treemap/pareto)
-  const totalByProj = {};
-  byStatus.forEach(r=>{
-    totalByProj[r.label] = (totalByProj[r.label]||0) + r.hours;
-  });
+  const totalByProjObj = Object.fromEntries(totalByProj);
+  const total = Array.from(totalByProj.values()).reduce((a,b)=>a+b,0);
 
-  return { byStatus, totalByProj, total };
+  return { totalByProj: totalByProjObj, byStatus: aggStatusRows, total };
 }
 
 function rebuildSnapshot(){
-  const keyColor = {
-    confirmed: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim(),
-    potential: getComputedStyle(document.documentElement).getPropertyValue('--potential').trim()
-  };
+  const { totalByProj, byStatus, total } = gatherSnapshotBreakdown();
 
-  const { byStatus, totalByProj, total } = snapshotData();
+  // top N filter (others grouped)
+  const N = parseInt(snapTopN.value||'8',10);
+  const pairs = Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
+  const top = pairs.slice(0, N);
+  const rest = pairs.slice(N);
+  const grouped = {};
+  top.forEach(([k,v])=> grouped[k]=v);
+  const restSum = rest.reduce((a,[,v])=>a+v,0);
+  if(restSum>0) grouped['Other'] = restSum;
+
+  // Build status flows limited to topN (others become "Other")
+  const topSet = new Set(top.map(p=>p[0]));
+  const flows = [];
+  byStatus.forEach(r=>{
+    const proj = topSet.has(r.label) ? r.label : 'Other';
+    const color = (r.status==='confirmed') ? keyColor.confirmed : keyColor.potential;
+    flows.push({ from: `${proj} (${r.status==='confirmed'?'C':'P'})`, to: (dataMap('c')[currentKey]?.name)||'Dept', flow: r.hours, color });
+  });
 
   // ----- Sankey -----
-  const flows = byStatus.map(r=>({
-    from: r.label,
-    to: (dataMap('c')[currentKey]?.name)||'Dept',
-    flow: r.hours,
-    color: keyColor[r.status] || '#999'
-  }));
   const skCtx = document.getElementById('sankeyCanvas').getContext('2d');
   if (sankeyChart) { sankeyChart.destroy(); sankeyChart = null; }
-  sankeyChart = new Chart(skCtx, {
-    type: 'sankey',
-    data: { datasets: [{ data: flows, colorFrom: (c)=>c.raw.color, colorTo: (c)=>c.raw.color, colorMode:'gradient' }] },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
-        label: (ctx)=> {
-          const v = ctx.raw?.flow || 0;
-          const pct = total>0 ? ((v/total)*100).toFixed(1) : '0.0';
-          return `${ctx.raw.from} → ${ctx.raw.to}: ${v.toFixed(1)} hrs (${pct}%)`;
-        }}}}
-    }
-  });
+  try {
+    sankeyChart = new Chart(skCtx, {
+      type: 'sankey',
+      data: { datasets: [{ data: flows, colorFrom: (c)=>c.raw.color, colorTo: (c)=>c.raw.color, colorMode:'gradient' }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{
+          label: (ctx)=> {
+            const v = ctx.raw?.flow || 0;
+            const pct = total>0 ? ((v/total)*100).toFixed(1) : '0.0';
+            return `${ctx.raw.from} → ${ctx.raw.to}: ${v.toFixed(1)} hrs (${pct}%)`;
+          }}}}
+      }
+    });
+  } catch (e) { console.error('Sankey render error:', e); }
 
   // ----- Treemap -----
   const tmCtx = document.getElementById('treemapCanvas').getContext('2d');
   if (treemapChart) { treemapChart.destroy(); treemapChart = null; }
-  const treemapData = Object.entries(totalByProj).map(([label, v])=>({label, v}));
-  treemapChart = new Chart(tmCtx, {
-    type:'treemap',
-    data:{ datasets: [{
-      tree: treemapData,
-      key: 'v',
-      labels: { display:true, formatter: (ctx)=>{
-        const v = ctx.raw.v || 0;
-        const pct = total>0 ? Math.round(v/total*100) : 0;
-        const name = ctx.raw.label;
-        return `${name}\n${v.toFixed(0)} hrs • ${pct}%`;
-      }},
-      backgroundColor: (ctx)=>{
-        const label = ctx.raw.label;
-        // find its dominant status color (based on byStatus, fallback brand)
-        let cCount=0, pCount=0;
-        byStatus.forEach(r=>{ if(r.label===label){ if(r.status==='confirmed') cCount+=r.hours; else pCount+=r.hours; }});
-        return (pCount>cCount) ? keyColor.potential : keyColor.confirmed;
-      },
-      borderWidth:1, borderColor:'#fff'
-    }]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
-  });
+  try {
+    const treemapData = Object.entries(grouped).map(([label, v])=>({label, v}));
+    treemapChart = new Chart(tmCtx, {
+      type:'treemap',
+      data:{ datasets: [{
+        tree: treemapData,
+        key: 'v',
+        labels: { display:true, formatter: (ctx)=>{
+          const v = ctx.raw.v || 0;
+          const pct = total>0 ? Math.round(v/total*100) : 0;
+          const name = ctx.raw.label;
+          return `${name}\n${v.toFixed(0)} hrs • ${pct}%`;
+        }},
+        backgroundColor: (ctx)=>{
+          const label = ctx.raw.label;
+          // hue by status majority
+          let cHours=0, pHours=0;
+          byStatus.forEach(r=>{ const proj = (topSet.has(r.label)?r.label:'Other'); if(proj===label){ if(r.status==='confirmed') cHours+=r.hours; else pHours+=r.hours; }});
+          return (pHours>cHours) ? keyColor.potential : keyColor.confirmed;
+        },
+        borderWidth:1, borderColor:'#fff'
+      }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+    });
+  } catch (e) { console.error('Treemap render error:', e); }
 
   // ----- Pareto -----
   const prCtx = document.getElementById('paretoCanvas').getContext('2d');
   if (paretoChart) { paretoChart.destroy(); paretoChart = null; }
-  const pairs = Object.entries(totalByProj).map(([k,v])=>[k,v]).sort((a,b)=>b[1]-a[1]);
-  const labels = pairs.map(p=>p[0]);
-  const vals = pairs.map(p=>p[1]);
-  const cum = [];
-  let running = 0;
-  vals.forEach(v=>{ running+=v; cum.push(total>0 ? (running/total*100) : 0); });
-  paretoChart = new Chart(prCtx, {
-    type:'bar',
-    data:{
-      labels,
-      datasets:[
-        { label:'Hours', data: vals, borderWidth:0, backgroundColor:'#9CA3AF' },
-        { label:'Cumulative %', data: cum, type:'line', yAxisID:'y2', borderColor:'#111827', backgroundColor:'rgba(17,24,39,0.1)', tension:0.2, pointRadius:2 }
-      ]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      scales:{
-        y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
-        y2:{ position:'right', beginAtZero:true, suggestedMax:100, ticks:{ callback:(v)=>`${v}%`}, grid:{drawOnChartArea:false} }
+  try {
+    const pairsAll = Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
+    const labels = pairsAll.map(p=>p[0]);
+    const vals = pairsAll.map(p=>p[1]);
+    const cum = [];
+    let running = 0;
+    vals.forEach(v=>{ running+=v; cum.push(total>0 ? (running/total*100) : 0); });
+    paretoChart = new Chart(prCtx, {
+      type:'bar',
+      data:{
+        labels,
+        datasets:[
+          { label:'Hours', data: vals, borderWidth:0, backgroundColor:'#9CA3AF' },
+          { label:'Cumulative %', data: cum, type:'line', yAxisID:'y2', borderColor:'#111827', backgroundColor:'rgba(17,24,39,0.1)', tension:0.2, pointRadius:2 }
+        ]
       },
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{
-        afterBody:(items)=>{
-          const i = items?.[0]?.dataIndex ?? -1;
-          if(i<0) return '';
-          const v = vals[i]; const pct = total>0 ? (v/total*100).toFixed(1) : '0.0';
-          return `Share: ${pct}%`;
-        }
-      }}}
-    }
-  });
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        scales:{
+          y:{ title:{display:true, text:'Hours'}, beginAtZero:true },
+          y2:{ position:'right', beginAtZero:true, suggestedMax:100, ticks:{ callback:(v)=>`${v}%`}, grid:{drawOnChartArea:false} }
+        },
+        plugins:{ legend:{display:false} }
+      }
+    });
+  } catch (e) { console.error('Pareto render error:', e); }
 }
 
-// Snapshot initial
-resetSnapshotSlider();
-
-// --------------------- initial render ---------------------
+// initial render
 refreshDatasets();
 rebuildUtilChart();
-rebuildSnapshot();
-
 </script>
 </body>
 </html>
@@ -1369,4 +1353,4 @@ html_code = (
 )
 
 # Make the iframe tall and disable its own scrolling to avoid double scrollbars
-components.html(html_code, height=2300, scrolling=False)
+components.html(html_code, height=1900, scrolling=False)
