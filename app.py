@@ -1220,7 +1220,7 @@ function rebuildSnapshot(){
   // Resize handlers
   window.addEventListener('resize', ()=>{ if(sankeyE) sankeyE.resize(); if(treemapE) treemapE.resize(); });
 }
-<script>
+
 // ---- Hangar Bay Planner ----
 const planIncPot = document.getElementById('planIncludePotential');
 const planPeriods = document.getElementById('planPeriods');
@@ -1484,7 +1484,7 @@ planFrom.addEventListener('change', ()=>{
   planFrom.value = fmtDateInput(v);
   rebuildPlanner();
 });
-</script>
+
 
 // ---------- Event listeners ----------
 sel.addEventListener('change', e=>{ currentKey=e.target.value; refreshDatasets(); });
