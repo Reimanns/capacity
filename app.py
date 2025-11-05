@@ -1224,6 +1224,54 @@ function rebuildSnapshot(){
 }
 
 // ---- Hangar Bay Planner ----
+
+// User-pinned bay overrides (applies whenever the project overlaps that period)
+// Slot options: H1, H2, D1, D2, D3
+const bayOverrides = [
+  { number: 'P7611', slot: 'H1' },
+  { number: 'P7706', slot: 'D2' },
+  { number: 'P7712', slot: 'D3' },
+  // You can optionally time-box any override:
+  // { number:'P7611', slot:'H1', from:'2025-10-20', to:'2025-12-04' }
+];
+
+function findProjectByNumber(num){
+    return projects.find(p => p.number === num) ||
+        potentialProjects.find(p => p.number === num) ||
+        null;
+}
+
+function isOverrideActive(ovr, periodStart, periodEnd){
+  // If override has explicit from/to, honor them
+  if (ovr.from || ovr.to){
+    const from = ovr.from ? parseDateLocalISO(ovr.from) : new Date(-8640000000000000);
+    const to   = ovr.to   ? parseDateLocalISO(ovr.to)   : new Date( 8640000000000000);
+    return !(to < periodStart || from > periodEnd);
+  }
+
+  // Otherwise, auto-derive from the project’s own induction/delivery
+  const p = findProjectByNumber(ovr.number);
+  if (p && p.induction && p.delivery){
+    const a = parseDateLocalISO(p.induction);
+    const b = parseDateLocalISO(p.delivery);
+    if (!isNaN(a) && !isNaN(b)) return !(b < periodStart || a > periodEnd);
+  }
+
+  // Fallback: if we can’t resolve dates, let the remaining/active check handle it
+  return true;
+}
+
+
+function slotToBay(slot, H, D){
+  if (slot === 'H1') return H[0];
+  if (slot === 'H2') return H[1];
+  if (slot === 'D1') return D[0];
+  if (slot === 'D2') return D[1];
+  if (slot === 'D3') return D[2];
+  return null;
+}
+
+
 const planIncPot = document.getElementById('planIncludePotential');
 const planPeriods = document.getElementById('planPeriods');
 const planFrom = document.getElementById('planFrom');
@@ -1306,93 +1354,107 @@ Hangar H: 2 bays (H1, H2). Each bay: either HEAVY (1), M757 (1), SPLIT(2 SMALL),
 Hangar D: bay1, bay2 (each can be 1×M757 OR SPLIT(2 SMALL); at most ONE of bay1/bay2 split in the same period); bay3 = SINGLE (1×M757 or 1×SMALL).
 Greedy, stable, readable – not “optimal packing”, but works and flags conflicts.
 */
-function assignForPeriod(aircraftList){
-  // split by type
-  const heavies = aircraftList.filter(x=>x.cls==='HEAVY');
-  const m757s   = aircraftList.filter(x=>x.cls==='M757');
-  const smalls  = aircraftList.filter(x=>x.cls==='SMALL');
+function assignForPeriod(aircraftList, periodIndex){
+  const { start, end } = periodBoundsForIndex(periodIndex);
 
+  // Bays
   const H = [{kind:'EMPTY', slots:[]}, {kind:'EMPTY', slots:[]}];
   const D = [{kind:'EMPTY', slots:[]}, {kind:'EMPTY', slots:[]}, {kind:'EMPTY', slots:[]}];
   const conflicts = [];
 
-  // 1) Place HEAVIES in H first
-  while (heavies.length){
-    const p = heavies.shift();
-    const bay = (H[0].kind==='EMPTY') ? H[0] : (H[1].kind==='EMPTY' ? H[1] : null);
-    if(!bay){ conflicts.push(p); continue; }
-    bay.kind = 'HEAVY'; bay.slots = [p];
+  // Place pinned projects first, remove them from the working list
+  const remaining = aircraftList.slice(); // shallow copy
+  for (const ovr of bayOverrides){
+    if (!isOverrideActive(ovr, start, end)) continue;
+    const idx = remaining.findIndex(a => a.number === ovr.number);
+    if (idx === -1) continue;
+
+    const p = remaining.splice(idx, 1)[0];   // take it out of the pool
+    const bay = slotToBay(ovr.slot, H, D);
+
+    // Validate slot compatibility (HEAVY only in H1/H2; others can go anywhere that fits)
+    if (!bay || bay.kind !== 'EMPTY') { conflicts.push(p); continue; }
+    if (p.cls === 'HEAVY' && !/^H[12]$/.test(ovr.slot)) { conflicts.push(p); continue; }
+
+    if (p.cls === 'HEAVY') { bay.kind='HEAVY';  bay.slots=[p]; }
+    else if (p.cls === 'M757'){ bay.kind='M757';  bay.slots=[p]; }
+    else if (p.cls === 'SMALL'){ bay.kind='SMALL1'; bay.slots=[p]; }
+    else { conflicts.push(p); }
   }
 
-  // 2) Place 757s – prefer D2, D1, then free H bay(s), then D3
+  // Split remaining by type
+  const heavies = remaining.filter(x=>x.cls==='HEAVY');
+  const m757s   = remaining.filter(x=>x.cls==='M757');
+  const smalls  = remaining.filter(x=>x.cls==='SMALL');
+
+  // Helper for later
   function takeFirstEmptyBay(cands){
     for(const b of cands){ if(b.kind==='EMPTY') return b; }
     return null;
   }
+
+  // 1) Place HEAVIES (only H)
+  while (heavies.length){
+    const p = heavies.shift();
+    const bay = (H[0].kind==='EMPTY') ? H[0] : (H[1].kind==='EMPTY' ? H[1] : null);
+    if(!bay){ conflicts.push(p); continue; }
+    bay.kind='HEAVY'; bay.slots=[p];
+  }
+
+  // 2) Place 757s – prefer D2 → D1 → free H → D3
   while (m757s.length){
     const p = m757s.shift();
     const bay = takeFirstEmptyBay([D[1], D[0], H[0], H[1], D[2]]);
     if(!bay){ conflicts.push(p); continue; }
-    bay.kind = 'M757'; bay.slots = [p];
+    bay.kind='M757'; bay.slots=[p];
   }
 
-  // 3) Place SMALLS
-  // Decide D side split (at most one of D1/D2 can be split). Prefer the one NOT holding a 757.
+  // 3) Place SMALLs
+  // Decide D side split (only one of D1/D2 may split)
   let dSplitIdx = null;
-  if (smalls.length >= 2){ // only worth splitting if we have at least 2 small to place
-    if (D[0].kind==='EMPTY' && D[1].kind!=='SPLIT' && D[1].kind!=='M757'){ dSplitIdx = 0; }
-    if (dSplitIdx===null && D[1].kind==='EMPTY' && D[0].kind!=='SPLIT' && D[0].kind!=='M757'){ dSplitIdx = 1; }
-    // if both empty, pick D1 by default
-    if (dSplitIdx===null && D[0].kind==='EMPTY' && D[1].kind==='EMPTY'){ dSplitIdx = 0; }
+  if (smalls.length >= 2){
+    if (D[0].kind==='EMPTY' && D[1].kind!=='SPLIT' && D[1].kind!=='M757') dSplitIdx = 0;
+    if (dSplitIdx===null && D[1].kind==='EMPTY' && D[0].kind!=='SPLIT' && D[0].kind!=='M757') dSplitIdx = 1;
+    if (dSplitIdx===null && D[0].kind==='EMPTY' && D[1].kind==='EMPTY') dSplitIdx = 0;
   }
 
-  // Split H bays if empty & we have smalls left (each split = 2 slots)
+  // Split H bays first if helpful
   function splitIfHelpful(bay){
-    if (smalls.length >= 2 && bay.kind==='EMPTY'){
-      bay.kind = 'SPLIT'; bay.slots = []; return true;
-    }
+    if (smalls.length >= 2 && bay.kind==='EMPTY'){ bay.kind='SPLIT'; bay.slots=[]; return true; }
     return false;
   }
   splitIfHelpful(H[0]); splitIfHelpful(H[1]);
-
-  // Split D chosen bay if decided
   if (dSplitIdx!==null && D[dSplitIdx].kind==='EMPTY'){ D[dSplitIdx].kind='SPLIT'; D[dSplitIdx].slots=[]; }
 
-  // D3 cannot split; holds one small if empty and needed
-  // After using splits, if one small remains, we can place into any single empty bay (H or D) as singleton.
+  // Fill split bays (2 small per split)
+  for (const bay of [H[0],H[1],D[0],D[1]]){
+    if (bay.kind==='SPLIT'){
+      while (smalls.length && bay.slots.length<2){ bay.slots.push(smalls.shift()); }
+    }
+  }
+
+  // Any leftover smalls into single slots
   function pushSmallIntoAnySingle(p){
-    // Any 'SPLIT' with free slot?
+    // Free slot in a split?
     for(const bay of [H[0],H[1],D[0],D[1]]){
       if (bay.kind==='SPLIT' && bay.slots.length<2){ bay.slots.push(p); return true; }
     }
-    // Otherwise any EMPTY bay as single (will mark as SMALL1)
+    // Else any empty single
     const cand = takeFirstEmptyBay([H[0],H[1],D[2],D[0],D[1]]);
-    if (cand){
-      cand.kind = 'SMALL1'; cand.slots = [p]; return true;
-    }
+    if (cand){ cand.kind='SMALL1'; cand.slots=[p]; return true; }
     return false;
   }
-
-  // Fill smalls into split slots first (2 per SPLIT)
-  for (const bay of [H[0],H[1],D[0],D[1]]){
-    if (bay.kind==='SPLIT'){
-      while (smalls.length && bay.slots.length<2){
-        bay.slots.push(smalls.shift());
-      }
-    }
-  }
-  // Any remaining smalls into any available single
   while (smalls.length){
     const p = smalls.shift();
     if(!pushSmallIntoAnySingle(p)){ conflicts.push(p); }
   }
 
-  // Mark visual classes for rendering
+  // Render cell objects
   function bayCell(bay){
-    if (bay.kind==='EMPTY') return { cls:'empty', text:'—', tips:[] };
+    if (bay.kind==='EMPTY') return { cls:'empty',  text:'—', tips:[] };
     if (bay.kind==='HEAVY') return { cls:'hheavy', text:`${bay.slots[0]?.short||'HEAVY'}`, tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
-    if (bay.kind==='M757')  return { cls:'hb757',  text:`${bay.slots[0]?.short||'757'}`, tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
-    if (bay.kind==='SPLIT'){
+    if (bay.kind==='M757')  return { cls:'hb757',  text:`${bay.slots[0]?.short||'757'}`,   tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
+    if (bay.kind==='SPLIT') {
       const t = bay.slots.map(s=>s.short||'S').join(' | ');
       const tips = bay.slots.map(s=>`${s.number} • ${s.model}`);
       return { cls:'hsplit', text: t || '—', tips };
@@ -1410,6 +1472,7 @@ function assignForPeriod(aircraftList){
     conflicts
   };
 }
+
 
 function buildPlannerGrid(indices){
   // Build header + 6 rows: H1, H2, D1, D2, D3, Conflicts
@@ -1436,7 +1499,7 @@ function buildPlannerGrid(indices){
   const includePot = planIncPot.checked;
   const assigned = indices.map(i=>{
     const act = activeProjectsForIdx(i, includePot);
-    return assignForPeriod(act);
+    return assignForPeriod(act, i);
   });
 
   row('Hangar H — Bay 1', (i)=> assigned[indices.indexOf(i)].H[0]);
