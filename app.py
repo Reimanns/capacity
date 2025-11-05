@@ -276,7 +276,7 @@ html_template = """
   <label for="disciplineSelect"><strong>Discipline:</strong></label>
   <select id="disciplineSelect"></select>
 
-  <label><input type="checkbox" id="showPotential" checked> Show Potential</label>
+  <label><input type="checkbox" id="showPotential"> Show Potential</label>
   <label><input type="checkbox" id="showActual"> Show Actual</label>
 
   <label><strong>Timeline:</strong>
@@ -585,6 +585,7 @@ const prodSlider = document.getElementById('prodFactor');
 const prodVal = document.getElementById('prodVal');
 const hoursInput = document.getElementById('hoursPerFTE');
 const chkPot = document.getElementById('showPotential');
+chkPot.checked = false;
 const chkAct = document.getElementById('showActual');
 const periodSel = document.getElementById('periodSel');
 const utilSepChk = document.getElementById('utilSeparate');
@@ -620,7 +621,7 @@ const annos = { annotations:{ todayLine:{ type:'line', xMin: weekTodayLabel, xMa
 const ctx = document.getElementById('myChart').getContext('2d');
 let currentKey = sel.value;
 let currentPeriod = 'weekly';
-let showPotential = true;
+let showPotential = false;
 let showActual = false;
 let utilSeparate = true;
 let utilChart = null;
@@ -1004,11 +1005,19 @@ function clampDateToLabels(d){
 function syncSnapshotRangeToLabels({force=false} = {}){
   const {min, max} = labelsMinMaxDates();
   if (!min || !max) return;
-  if (force || !snapFrom.value) snapFrom.value = fmtDateInput(min);
+
+  // Default the "From" to the current period that contains today
+  const today = new Date();
+  const preferFrom = (currentPeriod==='weekly') ? mondayOf(today) : firstOfMonth(today);
+
+  if (force || !snapFrom.value) snapFrom.value = fmtDateInput(clampDateToLabels(preferFrom));
   if (force || !snapTo.value)   snapTo.value   = fmtDateInput(max);
+
+  // Re-clamp in case user changed periods
   snapFrom.value = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapFrom.value)));
   snapTo.value   = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapTo.value)));
 }
+
 snapFrom.addEventListener('change', ()=>{
   const f = parseDateLocalISO(snapFrom.value);
   const t = parseDateLocalISO(snapTo.value);
@@ -1279,16 +1288,20 @@ const hangarGrid = document.getElementById('hangarGrid');
 function setPlannerDefaultDates(){
   const labels = currentLabels();
   if (!labels.length) return;
-  const first = parseDateLocalISO(labels[0]);
-  const today = new Date();
-  // default to the first label >= today, else the first label
-  let start = first;
-  for (const lbl of labels){
-    const d = parseDateLocalISO(lbl);
-    if (d >= today) { start = d; break; }
-  }
-  planFrom.value = fmtDateInput(start);
+
+  // Sunday before (or equal to) today
+  const t = new Date();
+  const sunday = new Date(t.getFullYear(), t.getMonth(), t.getDate() - t.getDay()); // getDay(): Sun=0
+
+  // Clamp to labels range so the value is always valid
+  const {min, max} = labelsMinMaxDates();
+  let v = sunday;
+  if (min && v < min) v = min;
+  if (max && v > max) v = max;
+
+  planFrom.value = fmtDateInput(v);
 }
+
 setPlannerDefaultDates();
 
 function modelShort(m){
