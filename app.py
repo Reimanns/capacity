@@ -237,6 +237,21 @@ html_template = """
       -webkit-appearance: none;
       margin: 0;
     }
+    /* Hangar Bay Planner */
+    .hangar-wrap { margin-top:14px; }
+    .hangar-controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:8px 0 10px; }
+    .hangar-grid { width:100%; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+    .hgrid { display:grid; min-width:800px; }
+    .hcell { border-bottom:1px solid #f1f5f9; border-right:1px solid #f1f5f9; padding:8px; font-size:12px; line-height:1.15; }
+    .hcell.header { background:#f8fafc; font-weight:600; position:sticky; top:0; z-index:1; }
+    .hcell.rowhdr { background:#f8fafc; font-weight:600; position:sticky; left:0; z-index:1; white-space:nowrap; }
+    .hcell.empty { color:#94a3b8; }
+    .hbadge { display:inline-block; padding:2px 6px; border-radius:999px; border:1px solid #e5e7eb; margin-right:6px; margin-bottom:4px; background:#fff; }
+    .hheavy   { background:#fee2e2; border-color:#fecaca; } /* widebody (777/747/330/340) */
+    .hb757    { background:#ffe4e6; border-color:#fecdd3; } /* 757 */
+    .hsmall   { background:#dcfce7; border-color:#bbf7d0; } /* 737/A319 */
+    .hsplit   { background:linear-gradient(90deg, #dcfce7 50%, #dcfce7 50%); border:1px dashed #86efac; }
+    .hconf { color:#b91c1c; font-weight:600; }
 
     /* Snapshot breakdown */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
@@ -401,6 +416,24 @@ html_template = """
       <h4>Pareto: Top contributors</h4>
       <canvas id="paretoCanvas"></canvas>
     </div>
+  </div>
+</details>
+
+<!-- Hangar Bay Planner (beta) -->
+<details class="snapshot" open>
+  <summary>Hangar Bay Planner (beta)</summary>
+  <div class="hangar-wrap">
+    <div class="hangar-controls">
+      <label><input type="checkbox" id="planIncludePotential" checked> Include Potential projects</label>
+      <label>Periods to show
+        <input type="number" id="planPeriods" min="4" max="52" step="1" value="12" style="width:72px;">
+      </label>
+      <label>Start at
+        <input type="date" id="planFrom">
+      </label>
+      <span style="margin-left:auto;font-size:12px;color:#6b7280;">Rules: H has 2 bays (each can split into 2 small). D1 & D2 can each host 1×B757 or split into 2 small (only one of them split at a time). D3 = one slot only.</span>
+    </div>
+    <div id="hangarGrid" class="hangar-grid"></div>
   </div>
 </details>
 
@@ -802,6 +835,7 @@ function refreshDatasets(){
   // keep snapshot date inputs in range whenever labels change
   syncSnapshotRangeToLabels();
   rebuildSnapshot();
+  rebuildPlanner();
 }
 
 // -------------------- Popover --------------------
@@ -1186,6 +1220,271 @@ function rebuildSnapshot(){
   // Resize handlers
   window.addEventListener('resize', ()=>{ if(sankeyE) sankeyE.resize(); if(treemapE) treemapE.resize(); });
 }
+<script>
+// ---- Hangar Bay Planner ----
+const planIncPot = document.getElementById('planIncludePotential');
+const planPeriods = document.getElementById('planPeriods');
+const planFrom = document.getElementById('planFrom');
+const hangarGrid = document.getElementById('hangarGrid');
+
+function setPlannerDefaultDates(){
+  const labels = currentLabels();
+  if (!labels.length) return;
+  const first = parseDateLocalISO(labels[0]);
+  const today = new Date();
+  // default to the first label >= today, else the first label
+  let start = first;
+  for (const lbl of labels){
+    const d = parseDateLocalISO(lbl);
+    if (d >= today) { start = d; break; }
+  }
+  planFrom.value = fmtDateInput(start);
+}
+setPlannerDefaultDates();
+
+function modelShort(m){
+  if(!m) return '';
+  const s = String(m).toUpperCase();
+  if (s.startsWith('B777')) return '777';
+  if (s.startsWith('B747')) return '747';
+  if (s.startsWith('A340')) return 'A340';
+  if (s.startsWith('A330')) return 'A330';
+  if (s.startsWith('B757')) return '757';
+  if (s.startsWith('B737')) return '737';
+  if (s.startsWith('A319')) return 'A319';
+  return s.replace('BOEING','B').replace('AIRBUS','A');
+}
+function classifyAircraft(model){
+  const s = String(model||'').toUpperCase();
+  if (!s) return null;
+  if (s.startsWith('B777') || s.startsWith('B747') || s.startsWith('A340') || s.startsWith('A330')) return 'HEAVY';
+  if (s.startsWith('B757')) return 'M757';
+  if (s.startsWith('B737') || s.startsWith('A319')) return 'SMALL';
+  return null; // ignore unrecognized
+}
+
+// Period bounds (reuse logic consistent with charts)
+function periodBoundsForIndex(i){
+  const L = parseDateLocalISO(currentLabels()[i]);
+  const start = (currentPeriod==='weekly') ? mondayOf(L) : firstOfMonth(L);
+  const end   = (currentPeriod==='weekly') ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6) : lastOfMonth(L);
+  return { start, end };
+}
+function overlaps(aStart,aEnd,bStart,bEnd){ return !(aEnd < bStart || aStart > bEnd); }
+
+function activeProjectsForIdx(i, includePotential){
+  const { start, end } = periodBoundsForIndex(i);
+  const arr = [];
+  function pull(list){
+    for(const p of list){
+      const a = parseDateLocalISO(p.induction);
+      const b = parseDateLocalISO(p.delivery);
+      if(isNaN(a)||isNaN(b)) continue;
+      if(overlaps(a,b,start,end) && p.aircraftModel){
+        const cls = classifyAircraft(p.aircraftModel);
+        if(!cls) continue;
+        arr.push({
+          number: p.number || '—',
+          customer: p.customer || 'Unknown',
+          model: p.aircraftModel,
+          short: modelShort(p.aircraftModel),
+          cls
+        });
+      }
+    }
+  }
+  pull(projects);
+  if (includePotential) pull(potentialProjects);
+  return arr;
+}
+
+/*
+Assignment model we render per period:
+Hangar H: 2 bays (H1, H2). Each bay: either HEAVY (1), M757 (1), SPLIT(2 SMALL), or SINGLE SMALL (1).
+Hangar D: bay1, bay2 (each can be 1×M757 OR SPLIT(2 SMALL); at most ONE of bay1/bay2 split in the same period); bay3 = SINGLE (1×M757 or 1×SMALL).
+Greedy, stable, readable – not “optimal packing”, but works and flags conflicts.
+*/
+function assignForPeriod(aircraftList){
+  // split by type
+  const heavies = aircraftList.filter(x=>x.cls==='HEAVY');
+  const m757s   = aircraftList.filter(x=>x.cls==='M757');
+  const smalls  = aircraftList.filter(x=>x.cls==='SMALL');
+
+  const H = [{kind:'EMPTY', slots:[]}, {kind:'EMPTY', slots:[]}];
+  const D = [{kind:'EMPTY', slots:[]}, {kind:'EMPTY', slots:[]}, {kind:'EMPTY', slots:[]}];
+  const conflicts = [];
+
+  // 1) Place HEAVIES in H first
+  while (heavies.length){
+    const p = heavies.shift();
+    const bay = (H[0].kind==='EMPTY') ? H[0] : (H[1].kind==='EMPTY' ? H[1] : null);
+    if(!bay){ conflicts.push(p); continue; }
+    bay.kind = 'HEAVY'; bay.slots = [p];
+  }
+
+  // 2) Place 757s – prefer D2, D1, then free H bay(s), then D3
+  function takeFirstEmptyBay(cands){
+    for(const b of cands){ if(b.kind==='EMPTY') return b; }
+    return null;
+  }
+  while (m757s.length){
+    const p = m757s.shift();
+    const bay = takeFirstEmptyBay([D[1], D[0], H[0], H[1], D[2]]);
+    if(!bay){ conflicts.push(p); continue; }
+    bay.kind = 'M757'; bay.slots = [p];
+  }
+
+  // 3) Place SMALLS
+  // Decide D side split (at most one of D1/D2 can be split). Prefer the one NOT holding a 757.
+  let dSplitIdx = null;
+  if (smalls.length >= 2){ // only worth splitting if we have at least 2 small to place
+    if (D[0].kind==='EMPTY' && D[1].kind!=='SPLIT' && D[1].kind!=='M757'){ dSplitIdx = 0; }
+    if (dSplitIdx===null && D[1].kind==='EMPTY' && D[0].kind!=='SPLIT' && D[0].kind!=='M757'){ dSplitIdx = 1; }
+    // if both empty, pick D1 by default
+    if (dSplitIdx===null && D[0].kind==='EMPTY' && D[1].kind==='EMPTY'){ dSplitIdx = 0; }
+  }
+
+  // Split H bays if empty & we have smalls left (each split = 2 slots)
+  function splitIfHelpful(bay){
+    if (smalls.length >= 2 && bay.kind==='EMPTY'){
+      bay.kind = 'SPLIT'; bay.slots = []; return true;
+    }
+    return false;
+  }
+  splitIfHelpful(H[0]); splitIfHelpful(H[1]);
+
+  // Split D chosen bay if decided
+  if (dSplitIdx!==null && D[dSplitIdx].kind==='EMPTY'){ D[dSplitIdx].kind='SPLIT'; D[dSplitIdx].slots=[]; }
+
+  // D3 cannot split; holds one small if empty and needed
+  // After using splits, if one small remains, we can place into any single empty bay (H or D) as singleton.
+  function pushSmallIntoAnySingle(p){
+    // Any 'SPLIT' with free slot?
+    for(const bay of [H[0],H[1],D[0],D[1]]){
+      if (bay.kind==='SPLIT' && bay.slots.length<2){ bay.slots.push(p); return true; }
+    }
+    // Otherwise any EMPTY bay as single (will mark as SMALL1)
+    const cand = takeFirstEmptyBay([H[0],H[1],D[2],D[0],D[1]]);
+    if (cand){
+      cand.kind = 'SMALL1'; cand.slots = [p]; return true;
+    }
+    return false;
+  }
+
+  // Fill smalls into split slots first (2 per SPLIT)
+  for (const bay of [H[0],H[1],D[0],D[1]]){
+    if (bay.kind==='SPLIT'){
+      while (smalls.length && bay.slots.length<2){
+        bay.slots.push(smalls.shift());
+      }
+    }
+  }
+  // Any remaining smalls into any available single
+  while (smalls.length){
+    const p = smalls.shift();
+    if(!pushSmallIntoAnySingle(p)){ conflicts.push(p); }
+  }
+
+  // Mark visual classes for rendering
+  function bayCell(bay){
+    if (bay.kind==='EMPTY') return { cls:'empty', text:'—', tips:[] };
+    if (bay.kind==='HEAVY') return { cls:'hheavy', text:`${bay.slots[0]?.short||'HEAVY'}`, tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
+    if (bay.kind==='M757')  return { cls:'hb757',  text:`${bay.slots[0]?.short||'757'}`, tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
+    if (bay.kind==='SPLIT'){
+      const t = bay.slots.map(s=>s.short||'S').join(' | ');
+      const tips = bay.slots.map(s=>`${s.number} • ${s.model}`);
+      return { cls:'hsplit', text: t || '—', tips };
+    }
+    if (bay.kind==='SMALL1'){
+      const s = bay.slots[0];
+      return { cls:'hsmall', text: s?.short||'S', tips:[`${s?.number||''} • ${s?.model||''}`] };
+    }
+    return { cls:'empty', text:'—', tips:[] };
+  }
+
+  return {
+    H: [bayCell(H[0]), bayCell(H[1])],
+    D: [bayCell(D[0]), bayCell(D[1]), bayCell(D[2])],
+    conflicts
+  };
+}
+
+function buildPlannerGrid(indices){
+  // Build header + 6 rows: H1, H2, D1, D2, D3, Conflicts
+  const cols = indices.length + 1; // +1 for row header
+  let html = `<div class="hgrid" style="grid-template-columns: 180px repeat(${indices.length}, minmax(110px,1fr));">`;
+
+  // Header row
+  html += `<div class="hcell header rowhdr"></div>`;
+  for(const i of indices){
+    const lbl = currentLabels()[i];
+    html += `<div class="hcell header">${lbl}</div>`;
+  }
+
+  function row(title, getter){
+    html += `<div class="hcell rowhdr">${title}</div>`;
+    for(const i of indices){
+      const cell = getter(i);
+      const tip = (cell.tips && cell.tips.length) ? `title="${cell.tips.join(' \\n ')}"` : '';
+      html += `<div class="hcell ${cell.cls}" ${tip}>${cell.text}</div>`;
+    }
+  }
+
+  // Precompute assignments
+  const includePot = planIncPot.checked;
+  const assigned = indices.map(i=>{
+    const act = activeProjectsForIdx(i, includePot);
+    return assignForPeriod(act);
+  });
+
+  row('Hangar H — Bay 1', (i)=> assigned[indices.indexOf(i)].H[0]);
+  row('Hangar H — Bay 2', (i)=> assigned[indices.indexOf(i)].H[1]);
+  row('Hangar D — Bay 1', (i)=> assigned[indices.indexOf(i)].D[0]);
+  row('Hangar D — Bay 2', (i)=> assigned[indices.indexOf(i)].D[1]);
+  row('Hangar D — Bay 3', (i)=> assigned[indices.indexOf(i)].D[2]);
+
+  // Conflicts row: show count + list
+  html += `<div class="hcell rowhdr">Conflicts</div>`;
+  for(const pack of assigned){
+    if (!pack.conflicts.length){
+      html += `<div class="hcell empty">0</div>`;
+    } else {
+      const txt = pack.conflicts.map(c=>`${c.short} (${c.number})`).join(', ');
+      html += `<div class="hcell"><span class="hconf">${pack.conflicts.length}</span> &middot; ${txt}</div>`;
+    }
+  }
+
+  html += `</div>`;
+  hangarGrid.innerHTML = html;
+}
+
+function rebuildPlanner(){
+  const labels = currentLabels();
+  if (!labels.length){ hangarGrid.innerHTML = ''; return; }
+
+  // choose subset based on planFrom + planPeriods
+  const startDate = parseDateLocalISO(planFrom.value) || parseDateLocalISO(labels[0]);
+  const idxs = [];
+  for(let i=0;i<labels.length;i++){
+    const d = parseDateLocalISO(labels[i]);
+    if (d>=startDate) idxs.push(i);
+  }
+  const N = Math.max(1, Math.min(parseInt(planPeriods.value||'12',10), idxs.length));
+  buildPlannerGrid(idxs.slice(0,N));
+}
+planIncPot.addEventListener('change', rebuildPlanner);
+planPeriods.addEventListener('change', rebuildPlanner);
+planFrom.addEventListener('change', ()=>{ 
+  // clamp to available labels
+  const d = parseDateLocalISO(planFrom.value);
+  const {min,max} = labelsMinMaxDates();
+  let v = d;
+  if (min && v<min) v=min;
+  if (max && v>max) v=max;
+  planFrom.value = fmtDateInput(v);
+  rebuildPlanner();
+});
+</script>
 
 // ---------- Event listeners ----------
 sel.addEventListener('change', e=>{ currentKey=e.target.value; refreshDatasets(); });
@@ -1199,6 +1498,7 @@ utilSepChk.addEventListener('change', e=>{ utilSeparate=e.target.checked; rebuil
 // ---------- Initial render ----------
 refreshDatasets();
 rebuildUtilChart();
+rebuildPlanner();
 </script>
 </body>
 </html>
