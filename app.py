@@ -247,13 +247,12 @@ html_template = """
     .hcell { border-bottom:1px solid #f1f5f9; border-right:1px solid #f1f5f9; padding:8px; font-size:12px; line-height:1.15; }
     .hcell.header { background:#f8fafc; font-weight:600; position:sticky; top:0; z-index:1; }
     .hcell.rowhdr { background:#f8fafc; font-weight:600; position:sticky; left:0; z-index:1; white-space:nowrap; }
-    .hcell.empty { color:#94a3b8; }
-    .hbadge { display:inline-block; padding:2px 6px; border-radius:999px; border:1px solid #e5e7eb; margin-right:6px; margin-bottom:4px; background:#fff; }
-    .hheavy   { background:#fee2e2; border-color:#fecaca; } /* widebody (777/747/330/340) */
-    .hb757    { background:#ffe4e6; border-color:#fecdd3; } /* 757 */
-    .hsmall   { background:#dcfce7; border-color:#bbf7d0; } /* 737/A319 */
-    .hsplit   { background:linear-gradient(90deg, #dcfce7 50%, #dcfce7 50%); border:1px dashed #86efac; }
-    .hconf { color:#b91c1c; font-weight:600; }
+    /* Occupancy-based colors */
+    .hcell.empty { background:#fef9c3; border-color:#fde68a; color:#7a6c1f; }   /* yellow: no aircraft */
+    .hcell.occupied { background:#dcfce7; border-color:#bbf7d0; }               /* green: has aircraft */
+    .hcell.occupied.split { border:1px dashed #86efac; }                        /* keep dashed edge for split */
+    .hcell.conflict { background:#fee2e2; border-color:#fecaca; color:#991b1b; font-weight:600; } /* red */
+
 
     /* Snapshot breakdown */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
@@ -1454,36 +1453,21 @@ function assignForPeriod(aircraftList, periodIndex){
   const label = (p)=> `${p.number || '—'} — ${p.customer || 'Unknown'}`;
   const tip   = (p)=> p.model || (p.short || ''); // tooltip shows aircraft type
 
-  if (bay.kind==='EMPTY') {
+  if (bay.kind === 'EMPTY') {
     return { cls:'empty', text:'—', tips:[] };
   }
-  if (bay.kind==='HEAVY') {
-    const s = bay.slots[0];
-    return { cls:'hheavy', text: label(s), tips:[tip(s)] };
-  }
-  if (bay.kind==='M757') {
-    const s = bay.slots[0];
-    return { cls:'hb757', text: label(s), tips:[tip(s)] };
-  }
-  if (bay.kind==='SMALL1') {
-    const s = bay.slots[0];
-    return { cls:'hsmall', text: label(s), tips:[tip(s)] };
-  }
-  if (bay.kind==='SPLIT') {
-    // two SMALL slots
+  if (bay.kind === 'SPLIT') {
+    // two SMALL slots packed in one bay — still "occupied", but dashed border to hint split
     const texts = bay.slots.map(label).join(' | ');
     const tips  = bay.slots.map(tip);
-    return { cls:'hsplit', text: texts || '—', tips };
+    return { cls:'occupied split', text: texts || '—', tips };
   }
-  return { cls:'empty', text:'—', tips:[] };
+
+  // Any single-aircraft occupancy (HEAVY, M757, SMALL1)
+  const s = bay.slots[0];
+  return { cls:'occupied', text: label(s), tips:[tip(s)] };
 }
 
- return {
-    H: [ bayCell(H[0]), bayCell(H[1]) ],
-    D: [ bayCell(D[0]), bayCell(D[1]), bayCell(D[2]) ],
-    conflicts
-  };
-}
 
 function buildPlannerGrid(indices){
   // Build header + 6 rows: H1, H2, D1, D2, D3, Conflicts
@@ -1519,16 +1503,18 @@ function buildPlannerGrid(indices){
   row('Hangar D — Bay 2', (i)=> assigned[indices.indexOf(i)].D[1]);
   row('Hangar D — Bay 3', (i)=> assigned[indices.indexOf(i)].D[2]);
 
-  // Conflicts row: show count + list
-  html += `<div class="hcell rowhdr">Conflicts</div>`;
-  for(const pack of assigned){
-    if (!pack.conflicts.length){
-      html += `<div class="hcell empty">0</div>`;
-    } else {
-      const txt = pack.conflicts.map(c=>`${c.short} (${c.number})`).join(', ');
-      html += `<div class="hcell"><span class="hconf">${pack.conflicts.length}</span> &middot; ${txt}</div>`;
+  
+  // Conflicts row: red cell if any conflicts
+    html += `<div class="hcell rowhdr">Conflicts</div>`;
+    for (const pack of assigned){
+      if (!pack.conflicts.length){
+        html += `<div class="hcell empty">0</div>`;
+      } else {
+        const txt = pack.conflicts.map(c=>`${c.short} (${c.number})`).join(', ');
+        html += `<div class="hcell conflict" title="${txt}">${pack.conflicts.length}</div>`;
+      }
     }
-  }
+
 
   html += `</div>`;
   hangarGrid.innerHTML = html;
