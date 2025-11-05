@@ -1451,27 +1451,33 @@ function assignForPeriod(aircraftList, periodIndex){
 
   // Render cell objects
   function bayCell(bay){
-    if (bay.kind==='EMPTY') return { cls:'empty',  text:'—', tips:[] };
-    if (bay.kind==='HEAVY') return { cls:'hheavy', text:`${bay.slots[0]?.short||'HEAVY'}`, tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
-    if (bay.kind==='M757')  return { cls:'hb757',  text:`${bay.slots[0]?.short||'757'}`,   tips:[`${bay.slots[0]?.number||''} • ${bay.slots[0]?.model||''}`] };
-    if (bay.kind==='SPLIT') {
-      const t = bay.slots.map(s=>s.short||'S').join(' | ');
-      const tips = bay.slots.map(s=>`${s.number} • ${s.model}`);
-      return { cls:'hsplit', text: t || '—', tips };
-    }
-    if (bay.kind==='SMALL1'){
-      const s = bay.slots[0];
-      return { cls:'hsmall', text: s?.short||'S', tips:[`${s?.number||''} • ${s?.model||''}`] };
-    }
+  const label = (p)=> `${p.number || '—'} — ${p.customer || 'Unknown'}`;
+  const tip   = (p)=> p.model || (p.short || ''); // tooltip shows aircraft type
+
+  if (bay.kind==='EMPTY') {
     return { cls:'empty', text:'—', tips:[] };
   }
-
-  return {
-    H: [bayCell(H[0]), bayCell(H[1])],
-    D: [bayCell(D[0]), bayCell(D[1]), bayCell(D[2])],
-    conflicts
-  };
+  if (bay.kind==='HEAVY') {
+    const s = bay.slots[0];
+    return { cls:'hheavy', text: label(s), tips:[tip(s)] };
+  }
+  if (bay.kind==='M757') {
+    const s = bay.slots[0];
+    return { cls:'hb757', text: label(s), tips:[tip(s)] };
+  }
+  if (bay.kind==='SMALL1') {
+    const s = bay.slots[0];
+    return { cls:'hsmall', text: label(s), tips:[tip(s)] };
+  }
+  if (bay.kind==='SPLIT') {
+    // two SMALL slots
+    const texts = bay.slots.map(label).join(' | ');
+    const tips  = bay.slots.map(tip);
+    return { cls:'hsplit', text: texts || '—', tips };
+  }
+  return { cls:'empty', text:'—', tips:[] };
 }
+
 
 
 function buildPlannerGrid(indices){
