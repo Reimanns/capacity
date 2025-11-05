@@ -1502,11 +1502,12 @@ function buildPlannerGrid(indices){
     return assignForPeriod(act, i);
   });
 
-  row('Hangar H — Bay 1', (i)=> assigned[indices.indexOf(i)].H[0]);
-  row('Hangar H — Bay 2', (i)=> assigned[indices.indexOf(i)].H[1]);
-  row('Hangar D — Bay 1', (i)=> assigned[indices.indexOf(i)].D[0]);
-  row('Hangar D — Bay 2', (i)=> assigned[indices.indexOf(i)].D[1]);
-  row('Hangar D — Bay 3', (i)=> assigned[indices.indexOf(i)].D[2]);
+  row('Hangar H — Bay 1', (i)=> bayCell(assigned[indices.indexOf(i)].H[0]));
+  row('Hangar H — Bay 2', (i)=> bayCell(assigned[indices.indexOf(i)].H[1]));
+  row('Hangar D — Bay 1', (i)=> bayCell(assigned[indices.indexOf(i)].D[0]));
+  row('Hangar D — Bay 2', (i)=> bayCell(assigned[indices.indexOf(i)].D[1]));
+  row('Hangar D — Bay 3', (i)=> bayCell(assigned[indices.indexOf(i)].D[2]));
+
 
   // Conflicts row: red cell if any conflicts
   html += `<div class="hcell rowhdr">Conflicts</div>`;
