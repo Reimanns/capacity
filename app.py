@@ -384,7 +384,7 @@ html_template = """
   <summary>Snapshot Breakdown (Projects → Dept)</summary>
   <div class="snap-controls">
     <label><input type="checkbox" id="snapConfirmed" checked> Include Confirmed</label>
-    <label><input type="checkbox" id="snapPotential" checked> Include Potential</label>
+    <label><input type="checkbox" id="snapPotential"> Include Potential</label>
 
     <label>Top N projects
       <input type="range" id="snapTopN" min="3" max="20" step="1" value="8" style="vertical-align:middle;">
@@ -425,7 +425,7 @@ html_template = """
   <summary>Hangar Bay Planner (beta)</summary>
   <div class="hangar-wrap">
     <div class="hangar-controls">
-      <label><input type="checkbox" id="planIncludePotential" checked> Include Potential projects</label>
+      <label><input type="checkbox" id="planIncludePotential"> Include Potential projects</label>
       <label>Periods to show
         <input type="number" id="planPeriods" min="4" max="52" step="1" value="12" style="width:72px;">
       </label>
@@ -976,6 +976,7 @@ let sankeyE=null, treemapE=null, paretoChart=null;
 const snapConfirmed=document.getElementById('snapConfirmed');
 const snapPotential=document.getElementById('snapPotential');
 const snapTopN=document.getElementById('snapTopN');
+snapPotential.checked = false;
 const snapTopNVal=document.getElementById('snapTopNVal');
 snapConfirmed.addEventListener('change', rebuildSnapshot);
 snapPotential.addEventListener('change', rebuildSnapshot);
@@ -1284,6 +1285,8 @@ const planIncPot = document.getElementById('planIncludePotential');
 const planPeriods = document.getElementById('planPeriods');
 const planFrom = document.getElementById('planFrom');
 const hangarGrid = document.getElementById('hangarGrid');
+
+planIncPot.checked = false;
 
 function setPlannerDefaultDates(){
   const labels = currentLabels();
