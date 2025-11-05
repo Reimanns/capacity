@@ -1503,16 +1503,15 @@ function buildPlannerGrid(indices){
   row('Hangar D — Bay 2', (i)=> assigned[indices.indexOf(i)].D[1]);
   row('Hangar D — Bay 3', (i)=> assigned[indices.indexOf(i)].D[2]);
 
-  
   // Conflicts row: red cell if any conflicts
-    html += `<div class="hcell rowhdr">Conflicts</div>`;
+  html += `<div class="hcell rowhdr">Conflicts</div>`;
     for (const pack of assigned){
-      if (!pack.conflicts.length){
-        html += `<div class="hcell empty">0</div>`;
-      } else {
+        if (!pack.conflicts.length){
+            html += `<div class="hcell empty">0</div>`;
+        } else {
         const txt = pack.conflicts.map(c=>`${c.short} (${c.number})`).join(', ');
         html += `<div class="hcell conflict" title="${txt}">${pack.conflicts.length}</div>`;
-      }
+        }
     }
 
 
