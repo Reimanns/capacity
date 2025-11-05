@@ -1448,8 +1448,12 @@ function assignForPeriod(aircraftList, periodIndex){
     if(!pushSmallIntoAnySingle(p)){ conflicts.push(p); }
   }
 
-  // Render cell objects
-  function bayCell(bay){
+  // ---------------- Return the assignments to the caller ----------------
+return { H, D, conflicts };
+} // ✅ closes assignForPeriod(…)
+
+// Render cell objects (top-level, used by buildPlannerGrid)
+function bayCell(bay){
   const label = (p)=> `${p.number || '—'} — ${p.customer || 'Unknown'}`;
   const tip   = (p)=> p.model || (p.short || ''); // tooltip shows aircraft type
 
@@ -1467,6 +1471,7 @@ function assignForPeriod(aircraftList, periodIndex){
   const s = bay.slots[0];
   return { cls:'occupied', text: label(s), tips:[tip(s)] };
 }
+
 
 
 function buildPlannerGrid(indices){
