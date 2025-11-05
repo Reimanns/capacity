@@ -1,4 +1,3 @@
-
 import json
 from datetime import date
 from copy import deepcopy
@@ -13,26 +12,26 @@ try:
 except Exception:
     pass
 
-# --------------------- DEFAULT DATA (YOUR SET) ---------------------
+# --------------------- DEFAULT DATA (WITH LOCATIONS) ---------------------
 DEFAULT_PROJECTS = [
-    {"number":"P7657","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-15T00:00:00","delivery":"2025-11-25T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37},
-    {"number":"P7611","customer":"Alpha Star","aircraftModel":None,"scope":None,"induction":"2025-10-20T00:00:00","delivery":"2025-12-04T00:00:00","Maintenance":2432.23,"Structures":1252.97,"Avionics":737.04,"Inspection":1474.08,"Interiors":1474.08,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
-    {"number":"P7645","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-30T00:00:00","delivery":"2025-12-10T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37},
-    {"number":"P7426","customer":"Celestial","aircraftModel":"B757","scope":"Post Maintenance Discrepancies","induction":"2026-01-05T00:00:00","delivery":"2026-01-15T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
-    {"number":"P7548","customer":"Ty Air","aircraftModel":"B737","scope":"CMS Issues","induction":"2025-10-20T00:00:00","delivery":"2025-10-30T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0},
-    {"number":"P7706","customer":"Valkyrie","aircraftModel":"B737-MAX","scope":"Starlink, Mods","induction":"2025-10-31T00:00:00","delivery":"2025-12-09T00:00:00","Maintenance":102.75,"Structures":328.8,"Avionics":411.0,"Inspection":164.4,"Interiors":945.3,"Engineering":82.2,"Cabinet":0,"Upholstery":0,"Finish":20.55},
-    {"number":"P7685","customer":"Sands","aircraftModel":"B737-700","scope":"Starlink","induction":"2025-11-03T00:00:00","delivery":"2025-11-17T00:00:00","Maintenance":105.44,"Structures":224.06,"Avionics":303.14,"Inspection":118.62,"Interiors":474.48,"Engineering":79.08,"Cabinet":0,"Upholstery":0,"Finish":13.18},
+    {"number":"P7657","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-15T00:00:00","delivery":"2025-11-25T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37,"location":"Hangar D Bay 2b"},
+    {"number":"P7611","customer":"Alpha Star","aircraftModel":None,"scope":None,"induction":"2025-10-20T00:00:00","delivery":"2025-12-04T00:00:00","Maintenance":2432.23,"Structures":1252.97,"Avionics":737.04,"Inspection":1474.08,"Interiors":1474.08,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0,"location":"Hangar H Bay 1a"},
+    {"number":"P7645","customer":"Kaiser","aircraftModel":"B737","scope":"Starlink","induction":"2025-11-30T00:00:00","delivery":"2025-12-10T00:00:00","Maintenance":93.57,"Structures":240.61,"Avionics":294.07,"Inspection":120.3,"Interiors":494.58,"Engineering":80.2,"Cabinet":0,"Upholstery":0,"Finish":13.37,"location":"Hangar D Bay 2b"},
+    {"number":"P7426","customer":"Celestial","aircraftModel":"B757","scope":"Post Maintenance Discrepancies","induction":"2026-01-05T00:00:00","delivery":"2026-01-15T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0,"location":"Hangar D Bay 1b"},
+    {"number":"P7548","customer":"Ty Air","aircraftModel":"B737","scope":"CMS Issues","induction":"2025-10-20T00:00:00","delivery":"2025-10-30T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0.0,"Cabinet":0,"Upholstery":0,"Finish":0.0,"location":"Hangar D Bay 3"},
+    {"number":"P7706","customer":"Valkyrie","aircraftModel":"B737-MAX","scope":"Starlink, Mods","induction":"2025-10-31T00:00:00","delivery":"2025-12-09T00:00:00","Maintenance":102.75,"Structures":328.8,"Avionics":411.0,"Inspection":164.4,"Interiors":945.3,"Engineering":82.2,"Cabinet":0,"Upholstery":0,"Finish":20.55,"location":"Hangar D Bay 2"},
+    {"number":"P7685","customer":"Sands","aircraftModel":"B737-700","scope":"Starlink","induction":"2025-11-03T00:00:00","delivery":"2025-11-17T00:00:00","Maintenance":105.44,"Structures":224.06,"Avionics":303.14,"Inspection":118.62,"Interiors":474.48,"Engineering":79.08,"Cabinet":0,"Upholstery":0,"Finish":13.18,"location":"Off Site"},
 ]
 DEFAULT_POTENTIAL = [
-    {"number":"P7661","customer":"Sands","aircraftModel":"A340-500","scope":"C Check","induction":"2026-01-29T00:00:00","delivery":"2026-02-28T00:00:00","Maintenance":2629.44,"Structures":1709.14,"Avionics":723.1,"Inspection":1248.98,"Interiors":262.94,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
-    {"number":"P7669","customer":"Sands","aircraftModel":"A319-133","scope":"C Check","induction":"2025-12-08T00:00:00","delivery":"2026-01-28T00:00:00","Maintenance":2029.67,"Structures":984.08,"Avionics":535.55,"Inspection":675.56,"Interiors":1906.66,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
-    {"number":None,"customer":"Sands","aircraftModel":"B767-300","scope":"C Check","induction":"2026-09-15T00:00:00","delivery":"2026-12-04T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
-    {"number":"P7686","customer":"Polaris","aircraftModel":"B777","scope":"1A & 3A Mx Checks","induction":"2025-12-01T00:00:00","delivery":"2025-12-09T00:00:00","Maintenance":643.15,"Structures":287.36,"Avionics":150.52,"Inspection":177.89,"Interiors":109.47,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
-    {"number":"P7430","customer":"Turkmen","aircraftModel":"B777","scope":"Maint/Recon/Refub","induction":"2025-11-10T00:00:00","delivery":"2026-07-13T00:00:00","Maintenance":12720.0,"Structures":12720.0,"Avionics":3180.0,"Inspection":3180.0,"Interiors":19080.0,"Engineering":3180,"Cabinet":3180,"Upholstery":3180,"Finish":3180},
-    {"number":"P7649","customer":"NEP","aircraftModel":"B767-300","scope":"Refurb","induction":"2026-02-02T00:00:00","delivery":"2026-07-13T00:00:00","Maintenance":2000.0,"Structures":2400.0,"Avionics":2800.0,"Inspection":800.0,"Interiors":4400.0,"Engineering":1800,"Cabinet":1600,"Upholstery":1200,"Finish":3000},
-    {"number":"P7689","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C3,C6C7 Mx","induction":"2025-09-10T00:00:00","delivery":"2026-11-07T00:00:00","Maintenance":8097.77,"Structures":1124.69,"Avionics":899.75,"Inspection":787.28,"Interiors":337.14,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
-    {"number":"P7690","customer":"Sands","aircraftModel":None,"scope":"C1,C2,C7 Mx","induction":"2025-05-25T00:00:00","delivery":"2025-07-22T00:00:00","Maintenance":3227.14,"Structures":2189.85,"Avionics":922.04,"Inspection":1152.55,"Interiors":4033.92,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
-    {"number":"P7691","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C2,C3,C7 Mx","induction":"2026-10-13T00:00:00","delivery":"2026-12-22T00:00:00","Maintenance":4038.3,"Structures":5115.18,"Avionics":1076.88,"Inspection":1346.1,"Interiors":1884.54,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0},
+    {"number":"P7661","customer":"Sands","aircraftModel":"A340-500","scope":"C Check","induction":"2026-01-29T00:00:00","delivery":"2026-02-28T00:00:00","Maintenance":2629.44,"Structures":1709.14,"Avionics":723.1,"Inspection":1248.98,"Interiors":262.94,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
+    {"number":"P7669","customer":"Sands","aircraftModel":"A319-133","scope":"C Check","induction":"2025-12-08T00:00:00","delivery":"2026-01-28T00:00:00","Maintenance":2029.67,"Structures":984.08,"Avionics":535.55,"Inspection":675.56,"Interiors":1906.66,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
+    {"number":None,"customer":"Sands","aircraftModel":"B767-300","scope":"C Check","induction":"2026-09-15T00:00:00","delivery":"2026-12-04T00:00:00","Maintenance":0.0,"Structures":0.0,"Avionics":0.0,"Inspection":0.0,"Interiors":0.0,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
+    {"number":"P7686","customer":"Polaris","aircraftModel":"B777","scope":"1A & 3A Mx Checks","induction":"2025-12-01T00:00:00","delivery":"2025-12-09T00:00:00","Maintenance":643.15,"Structures":287.36,"Avionics":150.52,"Inspection":177.89,"Interiors":109.47,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
+    {"number":"P7430","customer":"Turkmen","aircraftModel":"B777","scope":"Maint/Recon/Refub","induction":"2025-11-10T00:00:00","delivery":"2026-07-13T00:00:00","Maintenance":12720.0,"Structures":12720.0,"Avionics":3180.0,"Inspection":3180.0,"Interiors":19080.0,"Engineering":3180,"Cabinet":3180,"Upholstery":3180,"Finish":3180,"location":None},
+    {"number":"P7649","customer":"NEP","aircraftModel":"B767-300","scope":"Refurb","induction":"2026-02-02T00:00:00","delivery":"2026-07-13T00:00:00","Maintenance":2000.0,"Structures":2400.0,"Avionics":2800.0,"Inspection":800.0,"Interiors":4400.0,"Engineering":1800,"Cabinet":1600,"Upholstery":1200,"Finish":3000,"location":None},
+    {"number":"P7689","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C3,C6C7 Mx","induction":"2025-09-10T00:00:00","delivery":"2026-11-07T00:00:00","Maintenance":8097.77,"Structures":1124.69,"Avionics":899.75,"Inspection":787.28,"Interiors":337.14,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
+    {"number":"P7690","customer":"Sands","aircraftModel":None,"scope":"C1,C2,C7 Mx","induction":"2025-05-25T00:00:00","delivery":"2025-07-22T00:00:00","Maintenance":3227.14,"Structures":2189.85,"Avionics":922.04,"Inspection":1152.55,"Interiors":4033.92,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
+    {"number":"P7691","customer":"Sands","aircraftModel":"B737-700","scope":"C1,C2,C3,C7 Mx","induction":"2026-10-13T00:00:00","delivery":"2026-12-22T00:00:00","Maintenance":4038.3,"Structures":5115.18,"Avionics":1076.88,"Inspection":1346.1,"Interiors":1884.54,"Engineering":0,"Cabinet":0,"Upholstery":0,"Finish":0,"location":None},
 ]
 DEFAULT_ACTUAL = []
 DEFAULT_DEPTS = [
@@ -74,6 +73,7 @@ with st.sidebar.form("quick_edit"):
         customer = st.text_input("Customer", "")
         aircraft = st.text_input("Aircraft Model", "")
         scope = st.text_input("Scope", "")
+        location = st.text_input("Location (e.g., Hangar D Bay 2b / Off Site)", "")
         induction = st.date_input("Induction", date(2025, 11, 1)).isoformat()
         delivery  = st.date_input("Delivery",  date(2025, 11, 8)).isoformat()
         hours_inputs = {k: st.number_input(f"{k} hours", min_value=0.0, value=0.0, step=1.0) for k in dept_keys()}
@@ -84,6 +84,7 @@ with st.sidebar.form("quick_edit"):
         customer = st.text_input("Customer", str(proj.get("customer") or ""))
         aircraft = st.text_input("Aircraft Model", str(proj.get("aircraftModel") or ""))
         scope = st.text_input("Scope", str(proj.get("scope") or ""))
+        location = st.text_input("Location (e.g., Hangar D Bay 2b / Off Site)", str(proj.get("location") or ""))
         induction = st.date_input("Induction", date.fromisoformat(str(proj["induction"])[:10])).isoformat()
         delivery  = st.date_input("Delivery",  date.fromisoformat(str(proj["delivery"])[:10])).isoformat()
         hours_inputs = {k: st.number_input(f"{k} hours", min_value=0.0, value=float(proj.get(k, 0) or 0), step=1.0) for k in dept_keys()}
@@ -96,7 +97,7 @@ with st.sidebar.form("quick_edit"):
 
 if apply_btn:
     entry = {"number": number.strip(), "customer": customer.strip(), "aircraftModel": aircraft.strip(),
-             "scope": scope.strip(), "induction": induction, "delivery": delivery}
+             "scope": scope.strip(), "induction": induction, "delivery": delivery, "location": location.strip()}
     for k in dept_keys(): entry[k] = float(hours_inputs[k] or 0.0)
     if select_existing == "➕ New Project":
         st.session_state[dataset_key].append(entry)
@@ -146,7 +147,7 @@ html_template = """
     try { if (window['chartjs-plugin-annotation']) { Chart.register(window['chartjs-plugin-annotation']); } } catch(e) {}
   </script>
 
-  <!-- ECharts for Sankey & Treemap (reliable UMD build) -->
+  <!-- ECharts -->
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 
   <style>
@@ -172,22 +173,17 @@ html_template = """
     .chart-wrap.util { height:380px; margin-top: 8px; }
     .footnote { text-align:center; color:#6b7280; font-size:12px; }
 
-    /* Anchored popover for drilldown */
-    .popover {
-      display:none; position:fixed; z-index:9999; max-width:min(92vw, 900px);
-      background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.2);
-    }
+    /* Popover */
+    .popover { display:none; position:fixed; z-index:9999; max-width:min(92vw, 900px);
+      background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,0.2); }
     .popover header { padding:10px 12px; border-bottom:1px solid #eee; font-weight:600; display:flex; justify-content:space-between; gap:10px; align-items:center; }
     .popover header button { border:none; background:#f3f4f6; border-radius:8px; padding:4px 8px; cursor:pointer; }
     .popover .content { padding:10px 12px 12px; max-height:60vh; overflow:auto; }
     .popover table { width:100%; border-collapse:collapse; }
     .popover th, .popover td { border-bottom:1px solid #eee; padding:6px 8px; text-align:left; font-size:13px; }
 
-    /* What-If panel */
-    .impact-grid{
-      display:grid; gap:10px; grid-template-columns: repeat(6, minmax(120px,1fr));
-      align-items:end; margin:10px 0 6px;
-    }
+    /* What-If */
+    .impact-grid{ display:grid; gap:10px; grid-template-columns: repeat(7, minmax(120px,1fr)); align-items:end; margin:10px 0 6px; }
     .impact-grid label{ font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
     .impact-grid input, .impact-grid select, .impact-grid button{ padding:8px; border:1px solid #e5e7eb; border-radius:8px; font-size:13px;}
     .impact-grid button{ cursor:pointer; background:#111827; color:#fff; border-color:#111827; }
@@ -198,47 +194,14 @@ html_template = """
     details.impact{ border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:8px 0 14px; }
     details.impact summary{ cursor:pointer; font-weight:600; }
 
-    /* Manual project sub-panel */
+    /* Manual project */
     .manual-panel { display:none; border:1px dashed #cbd5e1; border-radius:10px; padding:10px; background:#fff; }
     .manual-grid { display:grid; gap:10px; grid-template-columns: repeat(6, minmax(120px,1fr)); margin-top:8px; }
     .manual-grid label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:6px; }
     .manual-hours { display:grid; gap:8px; grid-template-columns: repeat(6, minmax(100px,1fr)); margin-top:10px; }
+    .manual-panel input, .manual-panel select, .manual-hours input { font-size:13px; line-height:1.25; padding:8px 10px; border:1px solid #e5e7eb; border-radius:8px; width:100%; box-sizing:border-box; }
 
-    /* ——— Normalize manual "hours" inputs to match the rest ——— */
-    .manual-panel input,
-    .manual-panel select,
-    .manual-hours input {
-      font-size: 13px;          /* match impact-grid controls */
-      line-height: 1.25;
-      padding: 8px 10px;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    .manual-hours label {
-      font-size: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .manual-grid,
-    .manual-hours {
-      align-items: end;
-    }
-    .manual-panel input[type="number"] {
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
-    .manual-panel input[type="number"]::-webkit-outer-spin-button,
-    .manual-panel input[type="number"]::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
-
-    /* Snapshot breakdown */
+    /* Snapshot */
     details.snapshot { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:10px 0 2px; }
     details.snapshot summary{ cursor:pointer; font-weight:600; }
     .snap-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0; }
@@ -248,8 +211,14 @@ html_template = """
     .snap-legend { font-size:12px; color:#374151; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:4px 0 6px; }
     .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; }
     .dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
-    .snap-echart { width:100%; flex:1 1 auto; }
 
+    /* Space section */
+    details.space { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; background:#fafafa; margin:12px 0 8px; }
+    details.space summary { cursor:pointer; font-weight:600; }
+    .space-controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+    .space-alert { display:none; padding:8px 10px; border-radius:8px; background:#fff7ed; color:#b45309; border:1px solid #fed7aa; margin:6px 0; }
+    .space-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; height:420px; display:flex; flex-direction:column; }
+    #spaceChart { width:100%; height:100%; }
   </style>
 </head>
 <body>
@@ -324,11 +293,15 @@ html_template = """
       <input type="date" id="impactDel">
     </label>
 
+    <label>Location
+      <select id="impactLoc"></select>
+    </label>
+
     <button id="impactRun">Calculate Impact</button>
     <button id="impactClear" style="background:#6b7280;border-color:#6b7280;">Clear What-If</button>
   </div>
 
-  <!-- Manual project details (shown only when source = Manual) -->
+  <!-- Manual project details -->
   <div class="manual-panel" id="manualPanel">
     <div class="manual-grid">
       <label>Project Number
@@ -363,7 +336,7 @@ html_template = """
 
 <p class="footnote">Tip: click the <em>Confirmed</em> line; if “Show Potential” is on, the popup includes both Confirmed and Potential for that period.</p>
 
-<!-- Snapshot Breakdown (Sankey, Treemap, Pareto) -->
+<!-- Snapshot Breakdown -->
 <details class="snapshot" open>
   <summary>Snapshot Breakdown (Projects → Dept)</summary>
   <div class="snap-controls">
@@ -404,7 +377,22 @@ html_template = """
   </div>
 </details>
 
-<!-- Anchored popover -->
+<!-- Hangar Space Feasibility -->
+<details class="space" open>
+  <summary>Hangar Space Feasibility</summary>
+
+  <div class="space-controls">
+    <label><input type="checkbox" id="spaceIncludePotential" checked> Include Potential</label>
+  </div>
+
+  <div id="spaceAlert" class="space-alert"></div>
+
+  <div class="space-card">
+    <div id="spaceChart"></div>
+  </div>
+</details>
+
+<!-- Popover -->
 <div class="popover" id="drillPopover" role="dialog" aria-modal="true" aria-labelledby="popTitle">
   <header>
     <div id="popTitle">Breakdown</div>
@@ -438,6 +426,13 @@ function isWorkday(d){ const day = d.getDay(); return day >= 1 && day <= 5; }
 function workdaysInclusive(a,b){ const start=new Date(a.getFullYear(), a.getMonth(), a.getDate()); const end=new Date(b.getFullYear(), b.getMonth(), b.getDate()); let c=0, d=new Date(start); while(d<=end){ if(isWorkday(d)) c++; d.setDate(d.getDate()+1);} return c; }
 function workdaysInMonth(d){ return workdaysInclusive(firstOfMonth(d), lastOfMonth(d)); }
 function projectLabel(p){ return `${p.number || '—'} — ${p.customer || 'Unknown'}`; }
+function labelBounds(period, label){
+  const L = parseDateLocalISO(label);
+  const start = (period==='weekly') ? mondayOf(L) : firstOfMonth(L);
+  const end   = (period==='weekly') ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6) : lastOfMonth(L);
+  return {start, end};
+}
+function overlaps(aStart, aEnd, bStart, bEnd){ return !(aEnd < bStart || aStart > bEnd); }
 
 // -------------------- Labels --------------------
 function getWeekList(){ let minD=null,maxD=null; function exp(arr){ for(const p of arr){ const a=parseDateLocalISO(p.induction), b=parseDateLocalISO(p.delivery); if(!minD||a<minD)minD=a; if(!maxD||b>maxD)maxD=b; } } if(projects.length)exp(projects); if(potentialProjects.length)exp(potentialProjects); if(projectsActual.length)exp(projectsActual); if(!minD||!maxD){ const start=mondayOf(new Date()); return [ymd(start)]; } const start=mondayOf(minD); const weeks=[]; const cur=new Date(start); while(cur<=maxD){ weeks.push(new Date(cur)); cur.setDate(cur.getDate()+7);} return weeks.map(ymd); }
@@ -541,6 +536,55 @@ departmentCapacities.forEach(d=>{
   dataMPotential[d.key]={name:d.name, series:pm.series, breakdown:pm.breakdown};
   dataMActual[d.key]   ={name:d.name, series:am.series, breakdown:am.breakdown};
 });
+
+// -------------------- Hangar patterns & classes --------------------
+const SMALL = 'S', MEDIUM = 'M', LARGE = 'L';
+const LARGE_TYPES  = [/^B777/i, /^B747/i, /^A340/i, /^A330/i];
+const MEDIUM_TYPES = [/^B757/i];
+const SMALL_TYPES  = [/^B737/i, /^A319/i];
+
+function aircraftClassOf(model){
+  const m = String(model || '').toUpperCase();
+  if (LARGE_TYPES.some(r => r.test(m)))  return LARGE;
+  if (MEDIUM_TYPES.some(r => r.test(m))) return MEDIUM;
+  if (SMALL_TYPES.some(r => r.test(m)))  return SMALL;
+  return SMALL; // conservative default
+}
+function hangarGroup(loc){
+  const s = String(loc || '');
+  if (/Hangar H/i.test(s)) return 'Hangar H';
+  if (/Hangar D/i.test(s)) return 'Hangar D';
+  return null;
+}
+const HANGAR_PATTERNS = {
+  'Hangar H': [
+    { L:2, M:0, S:0, label:'2 × widebody' },
+    { L:1, M:0, S:3, label:'1 × widebody + 3 × narrow' },
+    { L:0, M:2, S:2, label:'2 × 757 + 2 × narrow' },
+    { L:0, M:0, S:6, label:'6 × narrow' },
+  ],
+  'Hangar D': [
+    { L:0, M:3, S:0, label:'3 × 757' },
+    { L:0, M:2, S:2, label:'2 × 757 + 2 × narrow' },
+    { L:0, M:1, S:4, label:'1 × 757 + 4 × narrow' },
+    { L:0, M:0, S:5, label:'5 × narrow' },
+  ],
+};
+function fitsPattern(counts, pattern){
+  return counts.L <= pattern.L && counts.M <= pattern.M && counts.S <= pattern.S;
+}
+function sumUnits(c){ return (c.S||0) + 2*(c.M||0) + 3*(c.L||0); }
+function bestPatternForCounts(hangar, counts){
+  const pats = HANGAR_PATTERNS[hangar] || [];
+  let feasible = null, minCapUnits = Infinity, minOver = Infinity, best = null;
+  for (const p of pats){
+    const capU = sumUnits(p);
+    const over = Math.max(0, (counts.L||0)-p.L) + Math.max(0, (counts.M||0)-p.M) + Math.max(0, (counts.S||0)-p.S);
+    if (fitsPattern(counts, p) && capU < minCapUnits){ feasible = p; minCapUnits = capU; }
+    if (over < minOver){ minOver = over; best = p; }
+  }
+  return feasible || best || null;
+}
 
 // -------------------- UI Elm refs --------------------
 const sel = document.getElementById('disciplineSelect');
@@ -759,181 +803,149 @@ function updateKPIs(){
   const capUnit = currentPeriod==='weekly' ? `${capArr[0]?.toFixed(0)||0} hrs / wk` : `~${(capArr[0]||0).toFixed(0)} hrs / mo (workdays)`;
   document.getElementById('weeklyCap').textContent = capUnit;
 }
-function refreshDatasets(){
-  const labels = currentLabels();
-  chart.data.labels = labels;
 
-  const deptName = (dataMap('c')[currentKey]?.name)||'Dept';
-  chart.data.datasets[0].label = `${deptName} Load (hrs)`;
-  chart.data.datasets[0].data  = (dataMap('c')[currentKey]?.series)||[];
-  chart.data.datasets[1].label = `${deptName} Capacity (hrs)`;
-  chart.data.datasets[1].data  = capacityArray(currentKey, labels, currentPeriod);
-  chart.data.datasets[2].label = `${deptName} Potential (hrs)`;
-  chart.data.datasets[2].data  = (dataMap('p')[currentKey]?.series)||[];
-  chart.data.datasets[3].label = `${deptName} Actual (hrs)`;
-  chart.data.datasets[3].data  = (dataMap('a')[currentKey]?.series)||[];
-  chart.data.datasets[2].hidden = !showPotential;
-  chart.data.datasets[3].hidden = !showActual;
-
-  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
-
-  const monthly = currentPeriod==='monthly';
-  chart.data.datasets.forEach((ds, i)=>{ ds.tension = monthly ? 0 : 0.1; if(i===1){ ds.stepped = monthly ? true : false; } });
-  chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
-  chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
-
-  chart.options.plugins.annotation.annotations.todayLine.xMin = monthly ? monthTodayLabel : weekTodayLabel;
-  chart.options.plugins.annotation.annotations.todayLine.xMax = monthly ? monthTodayLabel : weekTodayLabel;
-
-  chart.update();
-  updateKPIs();
-
-  if (utilChart) {
-    utilChart.data.labels = currentLabels();
-    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showPotential);
-    utilChart.options.scales.x.title.text = (currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting');
-    const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
-    utilChart.options.plugins.annotation.annotations.todayLine.xMin = todayX;
-    utilChart.options.plugins.annotation.annotations.todayLine.xMax = todayX;
-    utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
-    utilChart.update();
-  }
-
-  // keep snapshot date inputs in range whenever labels change
-  syncSnapshotRangeToLabels();
-  rebuildSnapshot();
-}
-
-// -------------------- Popover --------------------
-const pop = document.getElementById('drillPopover');
-const popTitle = document.getElementById('popTitle');
-const popHead = document.getElementById('popHead');
-const popBody = document.getElementById('popBody');
-document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
-function placePopoverAt(x, y){ pop.style.display='block'; const rect=pop.getBoundingClientRect(); const pad=12; const vw=innerWidth; const vh=innerHeight; let left=x+14, top=y-10; if(left+rect.width+pad>vw) left=vw-rect.width-pad; if(top+rect.height+pad>vh) top=vh-rect.height-pad; if(top<pad) top=pad; if(left<pad) left=pad; pop.style.left=left+"px"; pop.style.top=top+"px"; }
-function openPopoverSingle(title, rows, x, y){ popTitle.textContent=title; popHead.innerHTML="<tr><th>Customer</th><th>Hours</th></tr>"; popBody.innerHTML=(rows&&rows.length)? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join(''):`<tr><td colspan="2">No data</td></tr>`; placePopoverAt(x,y); }
-function mergeConfirmedPotential(bc, bp){ const map=new Map(); (bc||[]).forEach(r=>{ map.set(r.customer, {customer:r.customer, conf:(r.hours||0), pot:0}); }); (bp||[]).forEach(r=>{ if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0);} else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)});} }); const rows=Array.from(map.values()).map(x=>({...x,total:(x.conf+x.pot)})); rows.sort((a,b)=>b.total-a.total); return rows; }
-function openPopoverCombined(title, rows, x, y){ popTitle.textContent=title; popHead.innerHTML="<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>"; popBody.innerHTML=(rows&&rows.length)? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join(''):`<tr><td colspan="4">No data</td></tr>`; placePopoverAt(x,y); }
-
-// ------- WHAT-IF -------
-const impactSource = document.getElementById('impactSource');
-const impactProjectSel = document.getElementById('impactProject');
-const impactProjWrap = document.getElementById('impactProjWrap');
-const impactMult = document.getElementById('impactMult');
-const impactLead = document.getElementById('impactLead');
-const impactOT = document.getElementById('impactOT');
-const impactTarget = document.getElementById('impactTarget');
-const impactInd = document.getElementById('impactInd');
-const impactDel = document.getElementById('impactDel');
-const impactRun = document.getElementById('impactRun');
-const impactClear = document.getElementById('impactClear');
-const impactResult = document.getElementById('impactResult');
-
-const manualPanel = document.getElementById('manualPanel');
-const manualHours = document.getElementById('manualHours');
-
-function fmtDateInput(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
-function addWorkdays(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1 && dow<=5) left--; } return t; }
-function maxDate(a,b){ return (a>b)?a:b; }
-function impactSourceProjects(){
-  const src=impactSource.value;
-  if(src==='manual'){
-    const m={ number:document.getElementById('m_number').value||'P-Manual', customer:document.getElementById('m_customer').value||'Manual', aircraftModel:document.getElementById('m_aircraft').value||'', scope:document.getElementById('m_scope').value||'What-If', induction:document.getElementById('m_ind').value||fmtDateInput(new Date()), delivery:document.getElementById('m_del').value||fmtDateInput(addWorkdays(new Date(),10)) };
-    departmentCapacities.forEach(d=>{ const v=parseFloat(document.getElementById('mh_'+d.key).value||'0')||0; m[d.key]=v; });
-    return [m];
-  }
-  return (src==='potential')?potentialProjects:projects;
-}
-function setImpactProjects(){
-  const src=impactSource.value;
-  if(src==='manual'){
-    impactProjWrap.style.display='none';
-    manualPanel.style.display='block';
-  } else {
-    impactProjWrap.style.display='block';
-    manualPanel.style.display='none';
-    const arr=impactSourceProjects();
-    impactProjectSel.innerHTML="";
-    arr.forEach((p,i)=>{ const opt=document.createElement('option'); opt.value=String(i); opt.textContent=`${p.number||'—'} — ${p.customer||'Unknown'}`; impactProjectSel.appendChild(opt); });
-    if(arr.length){ const p=arr[0]; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); } else { impactInd.value=""; impactDel.value=""; }
-  }
-}
-impactSource.addEventListener('change', setImpactProjects);
-(function initManualHours(){ let html=""; departmentCapacities.forEach(d=>{ html += `<label>${d.name} hours<input id="mh_${d.key}" type="number" step="1" value="0"></label>`; }); manualHours.innerHTML=html; document.getElementById('m_ind').value=fmtDateInput(new Date()); document.getElementById('m_del').value=fmtDateInput(addWorkdays(new Date(),10)); })();
-impactProjectSel.addEventListener('change', ()=>{ const arr=impactSourceProjects(); const p=arr[Number(impactProjectSel.value)||0]; if(!p) return; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); });
-setImpactProjects();
-
-function capPerDay(key, otPct){ const dept=departmentCapacities.find(x=>x.key===key); const perWeek=(dept?.headcount||0)*HOURS_PER_FTE*PRODUCTIVITY_FACTOR; const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; return (perWeek*uplift)/5.0; }
-function baselineSeries(period, key){ const mapC=(period==='weekly')?dataWConfirmed:dataMConfirmed; return (mapC[key]?.series||[]).slice(); }
-function periodRange(period, labels, start, end){
-  let s=-1, e=-1;
-  for(let i=0;i<labels.length;i++){
-    const L=parseDateLocalISO(labels[i]);
-    const Pstart=(period==='weekly')?mondayOf(L):firstOfMonth(L);
-    const Pend=(period==='weekly')?new Date(Pstart.getFullYear(), Pstart.getMonth(), Pstart.getDate()+6):lastOfMonth(L);
-    if(s===-1 && Pend>=start) s=i;
-    if(Pstart<=end) e=i;
-  }
-  if(s===-1 || e===-1 || e<s) return null; return {s,e};
-}
-function sumHeadroom(period, key, start, end, otPct){
-  const labels=(period==='weekly')?weekLabels:monthLabels; const cap=capacityArray(key, labels, period); const base=baselineSeries(period, key); const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; const rng=periodRange(period, labels, start, end); if(!rng) return 0; let sum=0; for(let i=rng.s;i<=rng.e;i++){ const hr=Math.max(0, cap[i]*uplift - (base[i]||0)); sum += hr; } return sum;
-}
-function renderImpactResult(obj){
-  const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
-  const dfmt=d=>{ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; };
-  let html = `
-    <div><strong>Earliest allowable induction:</strong> ${dfmt(earliestStart)}</div>
-    <div><strong>Requested induction:</strong> ${dfmt(targetStart)}</div>
-    <div><strong>Requested delivery:</strong> ${dfmt(targetEnd)}</div>
-    <div><strong>New delivery (what-if):</strong> ${dfmt(newEnd)} <em>${slipDays>0?`(+${slipDays} workdays)`:''}</em></div>
-    <table class="impact-table">
-      <thead><tr><th>Department</th><th>Proj Hours</th><th>Headroom</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
-      <tbody>
-        ${rows.map(r=>`<tr>
-          <td>${r.name}</td>
-          <td>${r.h.toFixed(0)}</td>
-          <td>${r.head.toFixed(0)}</td>
-          <td style="color:${r.short>0?'#b91c1c':'#065f46'};">${r.short>0?(''+r.short.toFixed(0)):'0'}</td>
-          <td><strong>${r.slip}</strong></td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  `;
-  impactResult.innerHTML = html;
-  const monthly=(currentPeriod==='monthly');
-  const startLbl = monthly ? ymd(firstOfMonth(earliestStart)) : ymd(mondayOf(earliestStart));
-  const endLbl   = monthly ? ymd(firstOfMonth(newEnd))       : ymd(mondayOf(newEnd));
-  chart.options.plugins.annotation.annotations.whatIfStart = { type:'line', xMin:startLbl, xMax:startLbl, borderColor:'#2563eb', borderWidth:2, label:{display:true, content:'What-If Start', position:'start', backgroundColor:'rgba(37,99,235,0.1)', color:'#2563eb'} };
-  chart.options.plugins.annotation.annotations.whatIfEnd   = { type:'line', xMin:endLbl,   xMax:endLbl,   borderColor:'#7c3aed', borderWidth:2, label:{display:true, content:'What-If End',   position:'end',   backgroundColor:'rgba(124,58,237,0.1)', color:'#7c3aed'} };
-  chart.update();
-}
-impactRun.addEventListener('click', ()=>{
-  const arr = impactSourceProjects();
-  const idx = (impactSource.value==='manual') ? 0 : (Number(impactProjectSel.value)||0);
-  const proj = arr[idx]; if(!proj){ impactResult.textContent="No project selected."; return; }
-
-  const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
-  const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
-  const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
-
-  const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
-  const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
-  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){ impactResult.textContent="Invalid induction/delivery dates."; return; }
-
-  const today = new Date(); const leadReady = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(today, minLead);
-  const earliestStart = (rawStart>leadReady)?rawStart:leadReady;
-  const targetStart = rawStart, targetEnd = rawEnd;
-
-  const rows=[]; let overallSlip=0;
-  departmentCapacities.forEach(d=>{
-    const key=d.key, name=d.name; const capDay=capPerDay(key, otPct); const H=(proj[key]||0)*mult; const head=sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct); const short=Math.max(0, H-head); const slip=(short>0 && capDay>0)?Math.ceil(short/capDay):0; overallSlip=Math.max(overallSlip, slip); rows.push({name,h:H,head,short,slip});
+// ---------- Space: per-location occupancy ----------
+function collectLocations(){
+  const set = new Set();
+  [...projects, ...potentialProjects].forEach(p=>{
+    if (p.location && String(p.location).trim()) set.add(String(p.location).trim());
   });
-  const newEnd = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(targetEnd, overallSlip);
+  // Seed with known ones (in case none in current data)
+  ['Hangar D Bay 1b','Hangar D Bay 1d','Hangar D Bay 2','Hangar D Bay 2b','Hangar D Bay 3','Hangar H Bay 1a','Off Site'].forEach(x=>set.add(x));
+  return Array.from(set);
+}
+const locNames = collectLocations();
+const locCapMap = new Map(locNames.map(name=>{
+  if (/Off Site/i.test(name)) return [name, Infinity];
+  return [name, 1]; // default 1 aircraft per named bay; adjust here if needed
+}));
 
-  renderImpactResult({ earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows });
-});
-impactClear.addEventListener('click', ()=>{ impactResult.innerHTML=""; if(chart?.options?.plugins?.annotation?.annotations){ delete chart.options.plugins.annotation.annotations.whatIfStart; delete chart.options.plugins.annotation.annotations.whatIfEnd; chart.update(); } });
+function buildSpaceOcc(includePotential=true){
+  const labels = currentLabels();
+  const occ = {};
+  locNames.forEach(loc=> occ[loc] = new Array(labels.length).fill(0));
+  function addSet(arr){
+    for (const p of arr){
+      const loc = (p.location && String(p.location).trim()) ? String(p.location).trim() : null;
+      if (!loc || !(loc in occ)) continue;
+      const a = parseDateLocalISO(p.induction), b = parseDateLocalISO(p.delivery);
+      for (let i=0;i<labels.length;i++){
+        const {start, end} = labelBounds(currentPeriod, labels[i]);
+        if (overlaps(a,b,start,end)) occ[loc][i] += 1;
+      }
+    }
+  }
+  addSet(projects);
+  if (includePotential) addSet(potentialProjects);
+  return occ;
+}
+
+// ---------- Space: aggregate hangar feasibility ----------
+function countsByHangar(includePotential = true){
+  const labels = currentLabels();
+  const counts = { 'Hangar H': labels.map(()=>({L:0,M:0,S:0})), 'Hangar D': labels.map(()=>({L:0,M:0,S:0})) };
+  function addSet(arr){
+    for (const p of arr){
+      const hg = hangarGroup(p.location);
+      if (!hg) continue;
+      const cls = aircraftClassOf(p.aircraftModel);
+      const ps = parseDateLocalISO(p.induction), pe = parseDateLocalISO(p.delivery);
+      for (let i=0;i<labels.length;i++){
+        const {start, end} = labelBounds(currentPeriod, labels[i]);
+        if (overlaps(ps, pe, start, end)) counts[hg][i][cls] += 1;
+      }
+    }
+  }
+  addSet(projects);
+  if (includePotential) addSet(potentialProjects);
+  return counts;
+}
+
+// ---------- Space: heatmap render ----------
+let spaceChart = null;
+function rebuildSpace(){
+  const includeP = document.getElementById('spaceIncludePotential')?.checked ?? true;
+  const labels = currentLabels();
+
+  const byHangar = countsByHangar(includeP);
+  const hangarRows = ['Hangar H (fit)', 'Hangar D (fit)'];
+  const hangarData = [];
+  const conflicts = [];
+
+  hangarRows.forEach((rowName, yIdx)=>{
+    const hg = rowName.startsWith('Hangar H') ? 'Hangar H' : 'Hangar D';
+    for (let x=0;x<labels.length;x++){
+      const c = byHangar[hg][x];
+      const pat = bestPatternForCounts(hg, c);
+      const feasible = pat && fitsPattern(c, pat);
+      const ratio = feasible ? (sumUnits(c)/Math.max(1,sumUnits(pat))) : 1.25;
+      hangarData.push([x, yIdx, ratio, c, pat, hg]);
+      if (!feasible) conflicts.push({hangar:hg, idx:x, counts:c, pat});
+    }
+  });
+
+  const occ = buildSpaceOcc(includeP);
+  const baseLocs = locNames;
+  const allRows = hangarRows.concat(baseLocs);
+  const data = [...hangarData];
+  baseLocs.forEach((loc, rowIdx)=>{
+    const cap = locCapMap.get(loc) ?? 1;
+    for (let x=0;x<labels.length;x++){
+      const o = occ[loc]?.[x] || 0;
+      const ratio = (cap===Infinity) ? 0 : (o/cap);
+      data.push([x, hangarRows.length + rowIdx, ratio, o, cap, loc]);
+    }
+  });
+
+  if (spaceChart) { spaceChart.dispose(); spaceChart = null; }
+  spaceChart = echarts.init(document.getElementById('spaceChart'));
+  spaceChart.setOption({
+    tooltip: {
+      formatter: (p)=>{
+        const y = p.data[1], name = allRows[y], x = p.data[0];
+        const lbl = labels[x];
+        if (name.endsWith('(fit)')){
+          const c = p.data[3], pat = p.data[4], hg = p.data[5];
+          const feasible = pat && fitsPattern(c, pat);
+          const want = pat ? `target: L${pat.L}/M${pat.M}/S${pat.S}` : '';
+          return `${hg} — ${lbl}<br/>now: L${c.L}/M${c.M}/S${c.S}${pat?`<br/>${want}`:''}<br/><b>${feasible?'Feasible ✅':'Conflict ❌'}</b>`;
+        } else {
+          const occ = p.data[3], cap = p.data[4];
+          return `${name} — ${lbl}<br/><b>${occ}${cap===Infinity?'':' / '+cap}</b> occupied`;
+        }
+      }
+    },
+    grid:{ top: 20, left: 130, right: 20, bottom: 40 },
+    xAxis: { type:'category', data: labels, axisLabel:{ fontSize:10, rotate:30 } },
+    yAxis: { type:'category', data: allRows, axisLabel:{ fontSize:12 } },
+    visualMap: {
+      min: 0, max: 1.5, orient:'horizontal', left:'center', bottom:0,
+      pieces: [
+        {lte:0.8, color:'#34d399', label:'≤80%'},
+        {gt:0.8, lte:1.0, color:'#f59e0b', label:'80–100%'},
+        {gt:1.0, color:'#ef4444', label:'>100% / conflict'}
+      ],
+      show:true
+    },
+    series: [{
+      type:'heatmap',
+      data: data.map(d=>[d[0], d[1], d[2]]),
+      emphasis:{ itemStyle:{ borderColor:'#374151', borderWidth:1 } },
+      progressive: 0
+    }]
+  });
+
+  const alertDiv = document.getElementById('spaceAlert');
+  if (conflicts.length){
+    const first = conflicts[0];
+    const when = labels[first.idx];
+    alertDiv.style.display = 'block';
+    alertDiv.innerHTML = `⚠️ <strong>Hangar conflict:</strong> ${first.hangar} at ${when} (need pattern like L${first.pat?.L??'?'}/M${first.pat?.M??'?'}/S${first.pat?.S??'?'}; current L${first.counts.L}/M${first.counts.M}/S${first.counts.S}).`;
+  } else {
+    alertDiv.style.display = 'none';
+    alertDiv.innerHTML = '';
+  }
+}
 
 // -------------------- Snapshot (ECharts Sankey + Treemap, Chart.js Pareto) --------------------
 let sankeyE=null, treemapE=null, paretoChart=null;
@@ -969,23 +981,13 @@ function clampDateToLabels(d){
 function syncSnapshotRangeToLabels({force=false} = {}){
   const {min, max} = labelsMinMaxDates();
   if (!min || !max) return;
-  if (force || !snapFrom.value) snapFrom.value = fmtDateInput(min);
-  if (force || !snapTo.value)   snapTo.value   = fmtDateInput(max);
-  snapFrom.value = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapFrom.value)));
-  snapTo.value   = fmtDateInput(clampDateToLabels(parseDateLocalISO(snapTo.value)));
+  if (force || !snapFrom.value) snapFrom.value = ymd(min);
+  if (force || !snapTo.value)   snapTo.value   = ymd(max);
+  snapFrom.value = ymd(clampDateToLabels(parseDateLocalISO(snapFrom.value)));
+  snapTo.value   = ymd(clampDateToLabels(parseDateLocalISO(snapTo.value)));
 }
-snapFrom.addEventListener('change', ()=>{
-  const f = parseDateLocalISO(snapFrom.value);
-  const t = parseDateLocalISO(snapTo.value);
-  if (t && f > t) snapTo.value = snapFrom.value;
-  rebuildSnapshot();
-});
-snapTo.addEventListener('change', ()=>{
-  const f = parseDateLocalISO(snapFrom.value);
-  const t = parseDateLocalISO(snapTo.value);
-  if (f && t < f) snapFrom.value = snapTo.value;
-  rebuildSnapshot();
-});
+snapFrom.addEventListener('change', ()=>{ const f = parseDateLocalISO(snapFrom.value); const t = parseDateLocalISO(snapTo.value); if (t && f > t) snapTo.value = snapFrom.value; rebuildSnapshot(); });
+snapTo.addEventListener('change',   ()=>{ const f = parseDateLocalISO(snapFrom.value); const t = parseDateLocalISO(snapTo.value); if (f && t < f) snapFrom.value = snapTo.value; rebuildSnapshot(); });
 snapReset.addEventListener('click', ()=>{ syncSnapshotRangeToLabels({force:true}); rebuildSnapshot(); });
 syncSnapshotRangeToLabels({force:true});
 
@@ -1002,16 +1004,10 @@ function gatherSnapshotBreakdown(){
   const labels = currentLabels();
 
   function periodBoundsForIndex(i){
-    const L = parseDateLocalISO(labels[i]);
-    const start = (currentPeriod==='weekly') ? mondayOf(L) : firstOfMonth(L);
-    const end   = (currentPeriod==='weekly')
-      ? new Date(start.getFullYear(), start.getMonth(), start.getDate()+6)
-      : lastOfMonth(L);
+    const {start, end} = labelBounds(currentPeriod, labels[i]);
     return { start, end };
   }
-  function periodWorkdays(start, end){
-    return workdaysInclusive(start, end); // uses your existing Mon–Fri counter
-  }
+  function periodWorkdays(start, end){ return workdaysInclusive(start, end); }
   function fractionOfPeriodSelected(i){
     if (!from || !to || isNaN(from) || isNaN(to)) return 1;
     const { start, end } = periodBoundsForIndex(i);
@@ -1029,7 +1025,7 @@ function gatherSnapshotBreakdown(){
       const rows = breakArr[i] || [];
       rows.forEach(r=>{
         const key = r.label || r.customer;
-        const v = (r.hours || 0) * frac;   // prorate by overlap fraction
+        const v = (r.hours || 0) * frac;
         totalByProj.set(key, (totalByProj.get(key) || 0) + v);
         byStatus.push({ label:key, status, hours:v });
       });
@@ -1053,8 +1049,6 @@ function gatherSnapshotBreakdown(){
   return { totalByProj:Object.fromEntries(totalByProj), byStatus:aggStatusRows, total };
 }
 
- 
-
 function rebuildSnapshot(){
   const sankeyDiv=document.getElementById('sankeyDiv');
   const treemapDiv=document.getElementById('treemapDiv');
@@ -1067,7 +1061,6 @@ function rebuildSnapshot(){
   const deptName=(dataMap('c')[currentKey]?.name)||'Dept';
   const { totalByProj, byStatus, total } = gatherSnapshotBreakdown();
 
-  // Top N grouping
   const N=parseInt(snapTopN.value||'8',10);
   const pairs=Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
   const top=pairs.slice(0,N);
@@ -1075,7 +1068,6 @@ function rebuildSnapshot(){
   const topSet=new Set(top.map(p=>p[0]));
   const restSum=rest.reduce((a,[,v])=>a+v,0);
 
-  // Sankey: split by status for color
   const nodesMap=new Map();
   function addNode(name, color){ if(!nodesMap.has(name)) nodesMap.set(name, {name, itemStyle:{color}}); }
   const targetNode = deptName;
@@ -1117,7 +1109,6 @@ function rebuildSnapshot(){
     });
   }
 
-  // Treemap (group by Confirmed/Potential)
   const groups = [];
   const includeC = snapConfirmed.checked, includeP=snapPotential.checked;
 
@@ -1155,15 +1146,11 @@ function rebuildSnapshot(){
         nodeClick:'zoomToNode',
         breadcrumb:{ show:false },
         data: groups,
-        label:{ show:true, formatter:(p)=>{
-          const v=+p.value||0; const pct= total>0 ? Math.round(v/total*100) : 0;
-          return `${p.name}\\n${v.toFixed(0)} hrs • ${pct}%`;
-        }}
+        label:{ show:true, formatter:(p)=>{ const v=+p.value||0; const pct= total>0 ? Math.round(v/total*100) : 0; return `${p.name}\\n${v.toFixed(0)} hrs • ${pct}%`; } }
       }]
     });
   }
 
-  // Pareto (Chart.js)
   const pairsAll=Object.entries(totalByProj).sort((a,b)=>b[1]-a[1]);
   const labels=pairsAll.map(p=>p[0]);
   const vals=pairsAll.map(p=>p[1]);
@@ -1183,9 +1170,218 @@ function rebuildSnapshot(){
     }
   });
 
-  // Resize handlers
   window.addEventListener('resize', ()=>{ if(sankeyE) sankeyE.resize(); if(treemapE) treemapE.resize(); });
 }
+
+// -------------------- Popover --------------------
+const pop = document.getElementById('drillPopover');
+const popTitle = document.getElementById('popTitle');
+const popHead = document.getElementById('popHead');
+const popBody = document.getElementById('popBody');
+document.getElementById('closePop').addEventListener('click', ()=>{ pop.style.display='none'; });
+function placePopoverAt(x, y){ pop.style.display='block'; const rect=pop.getBoundingClientRect(); const pad=12; const vw=innerWidth; const vh=innerHeight; let left=x+14, top=y-10; if(left+rect.width+pad>vw) left=vw-rect.width-pad; if(top+rect.height+pad>vh) top=vh-rect.height-pad; if(top<pad) top=pad; if(left<pad) left=pad; pop.style.left=left+"px"; pop.style.top=top+"px"; }
+function openPopoverSingle(title, rows, x, y){ popTitle.textContent=title; popHead.innerHTML="<tr><th>Customer</th><th>Hours</th></tr>"; popBody.innerHTML=(rows&&rows.length)? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.hours.toFixed(1)}</td></tr>`).join(''):`<tr><td colspan="2">No data</td></tr>`; placePopoverAt(x,y); }
+function mergeConfirmedPotential(bc, bp){ const map=new Map(); (bc||[]).forEach(r=>{ map.set(r.customer, {customer:r.customer, conf:(r.hours||0), pot:0}); }); (bp||[]).forEach(r=>{ if(map.has(r.customer)){ map.get(r.customer).pot += (r.hours||0);} else { map.set(r.customer, {customer:r.customer, conf:0, pot:(r.hours||0)});} }); const rows=Array.from(map.values()).map(x=>({...x,total:(x.conf+x.pot)})); rows.sort((a,b)=>b.total-a.total); return rows; }
+function openPopoverCombined(title, rows, x, y){ popTitle.textContent=title; popHead.innerHTML="<tr><th>Customer</th><th>Confirmed</th><th>Potential</th><th>Total</th></tr>"; popBody.innerHTML=(rows&&rows.length)? rows.map(r=>`<tr><td>${r.customer}</td><td>${r.conf.toFixed(1)}</td><td>${r.pot.toFixed(1)}</td><td>${r.total.toFixed(1)}</td></tr>`).join(''):`<tr><td colspan="4">No data</td></tr>`; placePopoverAt(x,y); }
+
+// ------- WHAT-IF -------
+const impactSource = document.getElementById('impactSource');
+const impactProjectSel = document.getElementById('impactProject');
+const impactProjWrap = document.getElementById('impactProjWrap');
+const impactMult = document.getElementById('impactMult');
+const impactLead = document.getElementById('impactLead');
+const impactOT = document.getElementById('impactOT');
+const impactTarget = document.getElementById('impactTarget');
+const impactInd = document.getElementById('impactInd');
+const impactDel = document.getElementById('impactDel');
+const impactLoc = document.getElementById('impactLoc');
+const impactRun = document.getElementById('impactRun');
+const impactClear = document.getElementById('impactClear');
+const impactResult = document.getElementById('impactResult');
+
+const manualPanel = document.getElementById('manualPanel');
+const manualHours = document.getElementById('manualHours');
+
+function fmtDateInput(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
+function addWorkdays(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1 && dow<=5) left--; } return t; }
+function maxDate(a,b){ return (a>b)?a:b; }
+function impactSourceProjects(){
+  const src=impactSource.value;
+  if(src==='manual'){
+    const m={ number:document.getElementById('m_number').value||'P-Manual', customer:document.getElementById('m_customer').value||'Manual',
+      aircraftModel:document.getElementById('m_aircraft').value||'', scope:document.getElementById('m_scope').value||'What-If',
+      induction:document.getElementById('m_ind').value||fmtDateInput(new Date()), delivery:document.getElementById('m_del').value||fmtDateInput(addWorkdays(new Date(),10)), location: impactLoc.value || '' };
+    departmentCapacities.forEach(d=>{ const v=parseFloat(document.getElementById('mh_'+d.key).value||'0')||0; m[d.key]=v; });
+    return [m];
+  }
+  return (src==='potential')?potentialProjects:projects;
+}
+function setImpactProjects(){
+  const src=impactSource.value;
+  // setup locations select
+  const locs = collectLocations();
+  impactLoc.innerHTML = '';
+  locs.concat(['Unassigned']).forEach((L,i)=>{
+    const opt=document.createElement('option'); opt.value=L; opt.textContent=L; impactLoc.appendChild(opt);
+  });
+
+  if(src==='manual'){
+    impactProjWrap.style.display='none';
+    manualPanel.style.display='block';
+    impactLoc.value = 'Unassigned';
+  } else {
+    impactProjWrap.style.display='block';
+    manualPanel.style.display='none';
+    const arr=impactSourceProjects();
+    impactProjectSel.innerHTML="";
+    arr.forEach((p,i)=>{ const opt=document.createElement('option'); opt.value=String(i); opt.textContent=`${p.number||'—'} — ${p.customer||'Unknown'}`; impactProjectSel.appendChild(opt); });
+    if(arr.length){
+      const p=arr[0];
+      if(p?.induction) impactInd.value=String(p.induction).slice(0,10);
+      if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10);
+      impactLoc.value = (p && p.location) ? p.location : 'Unassigned';
+    } else { impactInd.value=""; impactDel.value=""; impactLoc.value='Unassigned'; }
+  }
+}
+impactSource.addEventListener('change', setImpactProjects);
+(function initManualHours(){ let html=""; departmentCapacities.forEach(d=>{ html += `<label>${d.name} hours<input id="mh_${d.key}" type="number" step="1" value="0"></label>`; }); manualHours.innerHTML=html; document.getElementById('m_ind').value=fmtDateInput(new Date()); document.getElementById('m_del').value=fmtDateInput(addWorkdays(new Date(),10)); })();
+impactProjectSel.addEventListener('change', ()=>{ const arr=impactSourceProjects(); const p=arr[Number(impactProjectSel.value)||0]; if(!p) return; if(p?.induction) impactInd.value=String(p.induction).slice(0,10); if(p?.delivery) impactDel.value=String(p.delivery).slice(0,10); impactLoc.value = (p && p.location) ? p.location : 'Unassigned'; });
+setImpactProjects();
+
+// ---- Space limiter for What-If ----
+function periodRange(period, labels, start, end){
+  let s=-1, e=-1;
+  for(let i=0;i<labels.length;i++){
+    const {start:ps, end:pe} = labelBounds(period, labels[i]);
+    if(s===-1 && pe>=start) s=i;
+    if(ps<=end) e=i;
+  }
+  if(s===-1 || e===-1 || e<s) return null; return {s,e};
+}
+function capPerDay(key, otPct){ const dept=departmentCapacities.find(x=>x.key===key); const perWeek=(dept?.headcount||0)*HOURS_PER_FTE*PRODUCTIVITY_FACTOR; const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; return (perWeek*uplift)/5.0; }
+function baselineSeries(period, key){ const mapC=(period==='weekly')?dataWConfirmed:dataMConfirmed; return (mapC[key]?.series||[]).slice(); }
+
+function computeSpaceSlipDays(hangarName, startDate, endDate, aircraftModel){
+  if (!hangarName) return {slipDays:0, pushedStart:startDate};
+  if (!HANGAR_PATTERNS[hangarName]) return {slipDays:0, pushedStart:startDate};
+
+  const labels = currentLabels();
+  const includePotential = true;
+  const baseCounts = countsByHangar(includePotential);
+  const cls = aircraftClassOf(aircraftModel);
+  const rng = periodRange(currentPeriod, labels, startDate, endDate);
+  if(!rng) return {slipDays:0, pushedStart:startDate};
+  const dur = rng.e - rng.s + 1;
+
+  function lblStart(i){ const L = parseDateLocalISO(labels[i]); return (currentPeriod==='weekly')?mondayOf(L):firstOfMonth(L); }
+
+  let s = rng.s;
+  while (s + dur - 1 < labels.length){
+    let ok = true;
+    for (let t=0; t<dur; t++){
+      const idx = s + t;
+      const c = {...baseCounts[hangarName][idx]};
+      c[cls] = (c[cls]||0) + 1;
+      const pat = bestPatternForCounts(hangarName, c);
+      if (!pat || !fitsPattern(c, pat)){ ok = false; break; }
+    }
+    if (ok){
+      const newStart = lblStart(s);
+      const slip = Math.max(0, workdaysInclusive(startDate, newStart) - 1);
+      return {slipDays: slip, pushedStart: newStart};
+    }
+    s++;
+  }
+  const newStart = lblStart(labels.length - 1);
+  const slip = Math.max(0, workdaysInclusive(startDate, newStart) - 1);
+  return {slipDays: slip, pushedStart: newStart};
+}
+
+function renderImpactResult(obj){
+  const {earliestStart, targetStart, targetEnd, newEnd, slipDays, rows} = obj;
+  let html = `
+    <div><strong>Earliest allowable induction:</strong> ${ymd(earliestStart)}</div>
+    <div><strong>Requested induction:</strong> ${ymd(targetStart)}</div>
+    <div><strong>Requested delivery:</strong> ${ymd(targetEnd)}</div>
+    <div><strong>New delivery (what-if):</strong> ${ymd(newEnd)} <em>${slipDays>0?`(+${slipDays} workdays)`:''}</em></div>
+    <table class="impact-table">
+      <thead><tr><th>Department</th><th>Proj Hours</th><th>Headroom</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td>${r.name}</td>
+          <td>${r.h.toFixed(0)}</td>
+          <td>${r.head.toFixed(0)}</td>
+          <td style="color:${r.short>0?'#b91c1c':'#065f46'};">${r.short>0?(''+r.short.toFixed(0)):'0'}</td>
+          <td><strong>${r.slip}</strong></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+  impactResult.innerHTML = html;
+  const monthly=(currentPeriod==='monthly');
+  const startLbl = monthly ? ymd(firstOfMonth(earliestStart)) : ymd(mondayOf(earliestStart));
+  const endLbl   = monthly ? ymd(firstOfMonth(newEnd))       : ymd(mondayOf(newEnd));
+  chart.options.plugins.annotation.annotations.whatIfStart = { type:'line', xMin:startLbl, xMax:startLbl, borderColor:'#2563eb', borderWidth:2, label:{display:true, content:'What-If Start', position:'start', backgroundColor:'rgba(37,99,235,0.1)', color:'#2563eb'} };
+  chart.options.plugins.annotation.annotations.whatIfEnd   = { type:'line', xMin:endLbl,   xMax:endLbl,   borderColor:'#7c3aed', borderWidth:2, label:{display:true, content:'What-If End',   position:'end',   backgroundColor:'rgba(124,58,237,0.1)', color:'#7c3aed'} };
+  chart.update();
+}
+
+impactRun.addEventListener('click', ()=>{
+  const arr = impactSourceProjects();
+  const idx = (impactSource.value==='manual') ? 0 : (Number(impactProjectSel.value)||0);
+  const proj = arr[idx]; if(!proj){ impactResult.textContent="No project selected."; return; }
+
+  const mult = Math.max(0, parseFloat(impactMult.value||'1')||1);
+  const minLead = Math.max(0, parseInt(impactLead.value||'0',10)||0);
+  const otPct = Math.max(0, parseFloat(impactOT.value||'0')||0);
+
+  const rawStart = parseDateLocalISO(impactInd.value?impactInd.value:proj.induction);
+  const rawEnd   = parseDateLocalISO(impactDel.value?impactDel.value:proj.delivery);
+  if(isNaN(rawStart) || isNaN(rawEnd) || rawEnd<rawStart){ impactResult.textContent="Invalid induction/delivery dates."; return; }
+
+  const today = new Date(); const leadReady = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate()); let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(today, minLead);
+  const earliestStart = (rawStart>leadReady)?rawStart:leadReady;
+  const targetStart = rawStart, targetEnd = rawEnd;
+
+  const rows=[]; let overallSlip=0;
+  departmentCapacities.forEach(d=>{
+    const key=d.key, name=d.name; const capDay=capPerDay(key, otPct); const H=(proj[key]||0)*mult; 
+    const head=sumHeadroom(currentPeriod, key, earliestStart, targetEnd, otPct); 
+    const short=Math.max(0, H-head); 
+    const slip=(short>0 && capDay>0)?Math.ceil(short/capDay):0; 
+    overallSlip=Math.max(overallSlip, slip); rows.push({name,h:H,head,short,slip});
+  });
+
+  // space slip
+  const locName = (impactLoc?.value && impactLoc.value!=='Unassigned') ? impactLoc.value : (proj.location || '');
+  const hg = hangarGroup(locName);
+  const acModel = proj.aircraftModel || '';
+  const space = hg ? computeSpaceSlipDays(hg, earliestStart, targetEnd, acModel) : {slipDays:0, pushedStart:earliestStart};
+  overallSlip = Math.max(overallSlip, space.slipDays);
+
+  const newEnd = (function addWD(d,n){ const t=new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    let left=Math.max(0,Math.floor(n)); while(left>0){ t.setDate(t.getDate()+1); const dow=t.getDay(); if(dow>=1&&dow<=5) left--; } return t; })(targetEnd, overallSlip);
+
+  renderImpactResult({ earliestStart, targetStart, targetEnd, newEnd, slipDays: overallSlip, rows });
+
+  impactResult.innerHTML += (space.slipDays>0)
+    ? `<div style="margin-top:6px; color:#b91c1c;"><strong>Space constraint:</strong> ${hg} requires +${space.slipDays} workdays to meet an allowed configuration.</div>`
+    : `<div style="margin-top:6px; color:#065f46;">No space conflicts in <b>${hg || 'N/A'}</b>.</div>`;
+});
+
+function sumHeadroom(period, key, start, end, otPct){
+  const labels=(period==='weekly')?weekLabels:monthLabels; 
+  const cap=capacityArray(key, labels, period); 
+  const base=baselineSeries(period, key); 
+  const uplift=1+Math.max(0,(parseFloat(otPct)||0))/100; 
+  const rng=periodRange(period, labels, start, end); 
+  if(!rng) return 0; 
+  let sum=0; 
+  for(let i=rng.s;i<=rng.e;i++){ const hr=Math.max(0, cap[i]*uplift - (base[i]||0)); sum += hr; } 
+  return sum;
+}
+
+impactClear.addEventListener('click', ()=>{ impactResult.innerHTML=""; if(chart?.options?.plugins?.annotation?.annotations){ delete chart.options.plugins.annotation.annotations.whatIfStart; delete chart.options.plugins.annotation.annotations.whatIfEnd; chart.update(); } });
 
 // ---------- Event listeners ----------
 sel.addEventListener('change', e=>{ currentKey=e.target.value; refreshDatasets(); });
@@ -1195,10 +1391,58 @@ prodSlider.addEventListener('input', e=>{ PRODUCTIVITY_FACTOR=parseFloat(e.targe
 hoursInput.addEventListener('change', e=>{ const v=parseInt(e.target.value||'40',10); HOURS_PER_FTE=isNaN(v)?40:Math.min(60,Math.max(30,v)); e.target.value=HOURS_PER_FTE; refreshDatasets(); });
 periodSel.addEventListener('change', e=>{ currentPeriod=e.target.value; refreshDatasets(); });
 utilSepChk.addEventListener('change', e=>{ utilSeparate=e.target.checked; rebuildUtilChart(); });
+document.getElementById('spaceIncludePotential').addEventListener('change', rebuildSpace);
+
+// ---------- Refresh ----------
+function refreshDatasets(){
+  const labels = currentLabels();
+  chart.data.labels = labels;
+
+  const deptName = (dataMap('c')[currentKey]?.name)||'Dept';
+  chart.data.datasets[0].label = `${deptName} Load (hrs)`;
+  chart.data.datasets[0].data  = (dataMap('c')[currentKey]?.series)||[];
+  chart.data.datasets[1].label = `${deptName} Capacity (hrs)`;
+  chart.data.datasets[1].data  = capacityArray(currentKey, labels, currentPeriod);
+  chart.data.datasets[2].label = `${deptName} Potential (hrs)`;
+  chart.data.datasets[2].data  = (dataMap('p')[currentKey]?.series)||[];
+  chart.data.datasets[3].label = `${deptName} Actual (hrs)`;
+  chart.data.datasets[3].data  = (dataMap('a')[currentKey]?.series)||[];
+  chart.data.datasets[2].hidden = !showPotential;
+  chart.data.datasets[3].hidden = !showActual;
+
+  chart.data.datasets[4].data = utilizationArray(currentPeriod, currentKey, showPotential);
+
+  const monthly = currentPeriod==='monthly';
+  chart.data.datasets.forEach((ds, i)=>{ ds.tension = monthly ? 0 : 0.1; if(i===1){ ds.stepped = monthly ? true : false; } });
+  chart.options.scales.x.title.text = monthly ? 'Month Starting' : 'Week Starting';
+  chart.options.plugins.title.text = (monthly ? 'Monthly (workdays)' : 'Weekly') + ' Load vs. Capacity - ' + deptName;
+
+  chart.options.plugins.annotation.annotations.todayLine.xMin = monthly ? monthTodayLabel : weekTodayLabel;
+  chart.options.plugins.annotation.annotations.todayLine.xMax = monthly ? monthTodayLabel : weekTodayLabel;
+
+  chart.update();
+  updateKPIs();
+
+  if (utilChart) {
+    utilChart.data.labels = currentLabels();
+    utilChart.data.datasets[0].data = utilizationArray(currentPeriod, currentKey, showPotential);
+    utilChart.options.scales.x.title.text = (currentPeriod==='weekly' ? 'Week Starting' : 'Month Starting');
+    const todayX = (currentPeriod==='weekly') ? weekTodayLabel : monthTodayLabel;
+    utilChart.options.plugins.annotation.annotations.todayLine.xMin = todayX;
+    utilChart.options.plugins.annotation.annotations.todayLine.xMax = todayX;
+    utilChart.data.datasets[0].tension = (currentPeriod==='monthly') ? 0 : 0.1;
+    utilChart.update();
+  }
+
+  syncSnapshotRangeToLabels();
+  rebuildSnapshot();
+  rebuildSpace();
+}
 
 // ---------- Initial render ----------
 refreshDatasets();
 rebuildUtilChart();
+
 </script>
 </body>
 </html>
@@ -1213,4 +1457,4 @@ html_code = (
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
 
-components.html(html_code, height=2600, scrolling=False)
+components.html(html_code, height=3200, scrolling=False)
