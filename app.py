@@ -1478,7 +1478,12 @@ function assignForPeriod(aircraftList, periodIndex){
   return { cls:'empty', text:'—', tips:[] };
 }
 
-
+ return {
+    H: [ bayCell(H[0]), bayCell(H[1]) ],
+    D: [ bayCell(D[0]), bayCell(D[1]), bayCell(D[2]) ],
+    conflicts
+  };
+}
 
 function buildPlannerGrid(indices){
   // Build header + 6 rows: H1, H2, D1, D2, D3, Conflicts
