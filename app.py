@@ -133,6 +133,39 @@ with st.expander("Edit Department Headcounts", expanded=False):
 
 st.markdown("---")
 
+# --------------------- POTENTIAL PROJECT FILTER (sidebar) ---------------------
+st.sidebar.header("Include Potential Projects")
+
+# Build stable keys even if a project has no number
+pot_keys = []
+label_by_key = {}
+for i, p in enumerate(st.session_state.potential):
+    key = p.get("number") or f"IDX{i}"  # fallback stable key for None numbers
+    label = f"{key} — {p.get('customer') or 'Unknown'} — {p.get('aircraftModel') or ''}"
+    pot_keys.append(key)
+    label_by_key[key] = label
+
+# Persist selection across reruns; default = ALL potential projects
+default_keys = st.session_state.get("potential_include_keys", pot_keys)
+
+selected_keys = st.sidebar.multiselect(
+    "Use in charts & What-If",
+    options=pot_keys,
+    default=default_keys,
+    format_func=lambda k: label_by_key.get(k, k),
+)
+
+# Save new selection to session
+st.session_state["potential_include_keys"] = selected_keys
+selected_set = set(selected_keys)
+
+# Filter the potential list that will feed the HTML/JS app
+filtered_potential = [
+    p for i, p in enumerate(st.session_state.potential)
+    if (p.get("number") or f"IDX{i}") in selected_set
+]
+
+
 # --------------------- HTML/JS ---------------------
 html_template = """
 <!DOCTYPE html>
@@ -1591,7 +1624,7 @@ rebuildPlanner();
 html_code = (
     html_template
       .replace("__PROJECTS__", json.dumps(st.session_state.projects))
-      .replace("__POTENTIAL__", json.dumps(st.session_state.potential))
+      .replace("__POTENTIAL__", json.dumps(filtered_potential))
       .replace("__ACTUAL__", json.dumps(st.session_state.actual))
       .replace("__DEPTS__", json.dumps(st.session_state.depts))
 )
