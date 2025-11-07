@@ -1004,7 +1004,7 @@ function renderImpactResult(obj){
     <div><strong>Requested delivery:</strong> ${dfmt(targetEnd)}</div>
     <div><strong>New delivery (what-if):</strong> ${dfmt(newEnd)} <em>${slipDays>0?`(+${slipDays} workdays)`:''}</em></div>
     <table class="impact-table">
-      <thead><tr><th>Department</th><th>Proj Hours</th><th>Headroom</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
+      <thead><tr><th>Department</th><th>Proj Hours</th><th>Available Manpower (Hrs.)</th><th>Shortfall</th><th>Slip (wd)</th></tr></thead>
       <tbody>
         ${rows.map(r=>`<tr>
           <td>${r.name}</td>
