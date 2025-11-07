@@ -145,21 +145,46 @@ for i, p in enumerate(st.session_state.potential):
     pot_keys.append(key)
     label_by_key[key] = label
 
-# Persist selection across reruns; default = ALL potential projects
-default_keys = st.session_state.get("potential_include_keys", pot_keys)
+# Seed the stored selection (default = ALL)
+if "potential_include_keys" not in st.session_state:
+    st.session_state["potential_include_keys"] = pot_keys.copy()
 
-selected_keys = st.sidebar.multiselect(
-    "Use in charts & What-If",
-    options=pot_keys,
-    default=default_keys,
-    format_func=lambda k: label_by_key.get(k, k),
-)
+# Bulk actions
+col1, col2 = st.sidebar.columns(2)
+if col1.button("Select all", use_container_width=True):
+    for i, p in enumerate(st.session_state.potential):
+        cb_key = f"pot_ck_{p.get('number') or f'IDX{i}'}"
+        st.session_state[cb_key] = True
+    st.session_state["potential_include_keys"] = pot_keys.copy()
+    st.rerun()
 
-# Save new selection to session
-st.session_state["potential_include_keys"] = selected_keys
-selected_set = set(selected_keys)
+if col2.button("Clear all", use_container_width=True):
+    for i, p in enumerate(st.session_state.potential):
+        cb_key = f"pot_ck_{p.get('number') or f'IDX{i}'}"
+        st.session_state[cb_key] = False
+    st.session_state["potential_include_keys"] = []
+    st.rerun()
+
+# Individual checkboxes (the actual checklist)
+new_selected = []
+with st.sidebar.expander("Potential projects (check to include)", expanded=True):
+    default_set = set(st.session_state["potential_include_keys"])
+    for i, p in enumerate(st.session_state.potential):
+        key = p.get("number") or f"IDX{i}"
+        label = label_by_key[key]
+        cb_key = f"pot_ck_{key}"
+
+        # Use current per-checkbox state if present; otherwise seed from stored selection
+        default_checked = key in default_set
+        checked = st.checkbox(label, value=default_checked, key=cb_key)
+        if checked:
+            new_selected.append(key)
+
+# Persist the latest selection
+st.session_state["potential_include_keys"] = new_selected
 
 # Filter the potential list that will feed the HTML/JS app
+selected_set = set(new_selected)
 filtered_potential = [
     p for i, p in enumerate(st.session_state.potential)
     if (p.get("number") or f"IDX{i}") in selected_set
