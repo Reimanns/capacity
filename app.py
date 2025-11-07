@@ -335,6 +335,16 @@ html_template = """
   <select id="disciplineSelect"></select>
 
   <label><input type="checkbox" id="showPotential"> Show Potential</label>
+  <details id="potFilter" class="chip">
+      <summary>Potential: <span id="potCount">All</span></summary>
+      <div id="potFilterList" style="max-height:220px;overflow:auto;margin-top:6px;"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="potApply" type="button">Apply</button>
+        <button id="potAll"   type="button">All</button>
+        <button id="potNone"  type="button">None</button>
+      </div>
+  </details>
+
   <label><input type="checkbox" id="showActual"> Show Actual</label>
 
   <label><strong>Timeline:</strong>
@@ -514,6 +524,10 @@ html_template = """
 // ---- LIVE DATA ----
 const projects = __PROJECTS__;
 const potentialProjects = __POTENTIAL__;
+
+// Start with all potential projects active
+let potentialActive = potentialProjects.slice();
+
 const projectsActual = __ACTUAL__;
 const departmentCapacities = __DEPTS__;
 
@@ -609,6 +623,14 @@ function computeMonthlyLoadsActual(arr, key, monthLabels){
     }
   }
   return {series:total, breakdown};
+}
+function rebuildPotentialDataFromActive(){
+  departmentCapacities.forEach(d=>{
+    const w = computeWeeklyLoadsDetailed(potentialActive, d.key, weekLabels);
+    const m = computeMonthlyLoadsDetailed(potentialActive, d.key, monthLabels);
+    dataWPotential[d.key] = { name: d.name, series: w.series, breakdown: w.breakdown };
+    dataMPotential[d.key] = { name: d.name, series: m.series, breakdown: m.breakdown };
+  });
 }
 
 // -------------------- Data Maps --------------------
@@ -1417,7 +1439,7 @@ function activeProjectsForIdx(i, includePotential){
     }
   }
   pull(projects);
-  if (includePotential) pull(potentialProjects);
+  if (includePotential) pull(potentialActive);
   return arr;
 }
 
@@ -1635,6 +1657,56 @@ prodSlider.addEventListener('input', e=>{ PRODUCTIVITY_FACTOR=parseFloat(e.targe
 hoursInput.addEventListener('change', e=>{ const v=parseInt(e.target.value||'40',10); HOURS_PER_FTE=isNaN(v)?40:Math.min(60,Math.max(30,v)); e.target.value=HOURS_PER_FTE; refreshDatasets(); });
 periodSel.addEventListener('change', e=>{ currentPeriod=e.target.value; refreshDatasets(); });
 utilSepChk.addEventListener('change', e=>{ utilSeparate=e.target.checked; rebuildUtilChart(); });
+
+// ---- Potential Filter UI (popover) ----
+const potFilterList = document.getElementById('potFilterList');
+const potCountEl    = document.getElementById('potCount');
+
+const potKeys = potentialProjects.map((p, i)=> (p.number ?? `IDX${i}`));
+let selectedPot = new Set(potKeys); // default = all selected
+
+function updatePotCount(){
+  const n = selectedPot.size, total = potKeys.length;
+  potCountEl.textContent = (n===total) ? 'All' : (n===0 ? 'None' : `${n}/${total}`);
+}
+
+function renderPotList(){
+  potFilterList.innerHTML = '';
+  potentialProjects.forEach((p, i)=>{
+    const key   = potKeys[i];
+    const cbId  = `pot_ck_${i}`;
+    const label = `${key} — ${(p.customer||'Unknown')} — ${(p.aircraftModel||'')}`;
+    potFilterList.insertAdjacentHTML('beforeend', `
+      <label style="display:flex;gap:8px;align-items:center;margin:4px 0;">
+        <input type="checkbox" id="${cbId}" ${selectedPot.has(key)?'checked':''}>
+        <span>${label}</span>
+      </label>
+    `);
+    document.getElementById(cbId).addEventListener('change', (e)=>{
+      if (e.target.checked) selectedPot.add(key); else selectedPot.delete(key);
+      updatePotCount();
+    });
+  });
+  updatePotCount();
+}
+
+document.getElementById('potAll').addEventListener('click', ()=>{
+  selectedPot = new Set(potKeys);
+  renderPotList();
+});
+document.getElementById('potNone').addEventListener('click', ()=>{
+  selectedPot = new Set();
+  renderPotList();
+});
+document.getElementById('potApply').addEventListener('click', ()=>{
+  potentialActive = potentialProjects.filter((p, i)=> selectedPot.has(potKeys[i]));
+  rebuildPotentialDataFromActive();
+  refreshDatasets();        // updates main chart, KPIs, snapshot, and planner
+});
+
+// Build UI once
+renderPotList();
+
 
 // ---------- Initial render ----------
 refreshDatasets();
